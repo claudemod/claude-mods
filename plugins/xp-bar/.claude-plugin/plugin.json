@@ -1,0 +1,19 @@
+{
+  "name": "xp-bar",
+  "version": "0.6.0",
+  "description": "Eine XP-Leiste im Minecraft-Stil über dem Chat zeigt dein Nutzungslimit und wie viele Tokens das ungefähr sind",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language / Sprache",
+      "description": "auto follows the system language; de = Deutsch, en = English",
+      "default": "auto",
+      "options": [
+        "auto",
+        "de",
+        "en"
+      ]
+    }
+  }
+}

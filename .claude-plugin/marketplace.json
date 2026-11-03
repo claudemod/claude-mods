@@ -1,0 +1,16 @@
+{
+  "name": "claude-mods",
+  "description": "Mods for the Claude Code desktop app, made by @claudemod",
+  "owner": { "name": "claudemod" },
+  "plugins": [
+    {
+      "name": "xp-bar",
+      "displayName": "XP Bar",
+      "source": "./plugins/xp-bar",
+      "description": "A Minecraft-style XP bar above the prompt: your usage limit, roughly how many tokens that is, and when it refills",
+      "author": { "name": "claudemod" },
+      "category": "ui",
+      "tags": ["mod", "usage", "limit", "xp-bar"]
+    }
+  ]
+}
