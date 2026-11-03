@@ -27,6 +27,16 @@ const COVER_ACROSS = 2
 const COVER_ABOVE = 1
 const COVER_BELOW = 1
 
+// The band's grey box is a 5 % veil over the chat's own ground, inside 8 px of
+// padding across and (40 px - a line) / 2 down. A ground in the chat's colour
+// ("userMessageBackground" is the desktop's surface-1, the page itself, in light
+// and dark alike), laid behind the bar on its own layer and reaching far past
+// that padding, hides the box: the band clips it at its edge, and its height
+// stays the bar's. Offsets are whole characters across and whole lines down.
+const BLEND_GROUND = 'userMessageBackground'
+const BLEND_ACROSS = 6
+const BLEND_DOWN = 3
+
 // How many calibration readings are kept per window; the estimate is their median.
 const MAX_SAMPLES = 21
 // A reading needs at least this many tokens behind it, else other usage
@@ -333,9 +343,19 @@ export const register: Register = (on, options) => {
     // in a popover of its own (padding, a rounded grey ground, a ring, a shadow).
     // Negative margins let the tooltip reach past that frame and cover it, so
     // what shows is the game's tooltip alone; at the bottom it stops short of the bar.
+    // The first, absolute box is the ground in the chat's colour that hides the
+    // band's grey box; the bar stands on a layer of its own above it.
     return (
       <Box flexDirection="row" justifyContent="center">
-        <Box key="xp">
+        <Box
+          position="absolute"
+          top={-BLEND_DOWN}
+          bottom={-BLEND_DOWN}
+          left={-BLEND_ACROSS}
+          right={-BLEND_ACROSS}
+          backgroundColor={BLEND_GROUND}
+        />
+        <Box key="xp" position="relative">
           <Svg source={bar} alt={view.alt} width={BAR_WIDTH} height={BAR_HEIGHT} />
           <Box position="absolute" display="none" hover={{ display: 'flex' }}>
             <Box marginLeft={-COVER_ACROSS} marginRight={-COVER_ACROSS} marginTop={-COVER_ABOVE} marginBottom={-COVER_BELOW}>

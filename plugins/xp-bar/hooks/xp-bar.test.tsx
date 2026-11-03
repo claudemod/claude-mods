@@ -92,8 +92,21 @@ test('auf dem Desktop: Pixel-Leiste im Band, die Details als Hover-Karte', async
   // and the margins inside let the tooltip cover the popover's own frame.
   const boxes = await ui.findAll({ type: 'Box' })
   expect(boxes.find(box => box.props.display === 'none')?.props.position).toBe('absolute')
-  const cover = boxes.find(box => box.props.marginTop !== undefined)
+  const cover = boxes.find(box => box.props.marginTop === -1)
   expect(cover?.props).toMatchObject({ marginLeft: -2, marginRight: -2, marginTop: -1, marginBottom: -1 })
+
+  // An absolute ground in the chat's own colour lies behind the bar and reaches
+  // far past the band's padding; the bar stands on its own layer above it.
+  const ground = boxes.find(box => box.props.backgroundColor !== undefined)
+  expect(ground?.props).toEqual({
+    position: 'absolute',
+    top: -3,
+    bottom: -3,
+    left: -6,
+    right: -6,
+    backgroundColor: 'userMessageBackground',
+  })
+  expect(boxes.find(box => box.key === 'xp')?.props.position).toBe('relative')
   await ui.unmount()
 })
 
