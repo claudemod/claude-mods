@@ -20,6 +20,15 @@
       "author": { "name": "claudemod" },
       "category": "game",
       "tags": ["mod", "game", "crafting", "highscore"]
+    },
+    {
+      "name": "mode-bar",
+      "displayName": "Mode Bar",
+      "source": "./plugins/mode-bar",
+      "description": "Ten one-click modes above the chat that make Claude cheaper, faster or more careful, plus a traffic light for how heavy the current task is",
+      "author": { "name": "claudemod" },
+      "category": "ui",
+      "tags": ["mod", "modes", "tokens", "effort"]
     }
   ]
 }

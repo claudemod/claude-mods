@@ -85,7 +85,10 @@ test('auf dem Desktop: Pixel-Leiste im Band, die Details als Hover-Karte', async
     /^Sitzung 37,5 %: Tokens werden gemessen, Voll um \d\d:\d\d \(in 2h 13m\)\. Woche 12 %: Tokens werden gemessen, Voll Fr\.,? 06\.11\.,? \d\d:\d\d\. Bei deinem Tempo: Woche reicht bis zum Reset\. Insgesamt seit 02\.11\.: 0,4× Sitzung · 0,1× Woche, 0 Tokens in allen Chats$/,
   )
   expect(card?.props.alt).toBe(bar?.props.alt)
-  expect(await ui.findAll({ type: 'Text' })).toHaveLength(0)
+  // The bar draws no text of its own; what the plugins beneath draw in the band
+  // (here the engine's) stays, shown under the bar by the reversed column.
+  expect((await ui.findAll({ type: 'Text' })).map(text => text.text)).toEqual(['engine'])
+  expect((await ui.findAll({ type: 'Box' }))[0]?.props.flexDirection).toBe('column-reverse')
 
   // The card waits hidden; its `hover` (kept apart from the props the kit
   // describes) has the desktop lift it above the bar while the pointer is on it,

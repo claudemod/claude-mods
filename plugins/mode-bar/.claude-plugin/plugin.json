@@ -1,0 +1,15 @@
+{
+  "name": "mode-bar",
+  "version": "0.6.0",
+  "description": "Ten one-click modes above the chat that make Claude cheaper, faster or more careful, plus a traffic light for how heavy the current task is",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "language": {
+      "type": "string",
+      "title": "Language / Sprache",
+      "description": "auto follows the system language; de = Deutsch, en = English",
+      "default": "auto",
+      "options": ["auto", "de", "en"]
+    }
+  }
+}

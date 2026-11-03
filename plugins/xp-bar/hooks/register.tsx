@@ -389,6 +389,10 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
 
+    // What the plugins beneath draw in the band (the Mode Bar's buttons) stays
+    // and goes under the bar.
+    const below = await next(e)
+
     await read($, now)
     const nowMs = await $.clock.now()
     const view = await describe($, nowMs)
@@ -398,6 +402,7 @@ export const register: Register = (on, options) => {
       const cells = 20
       const filled = Math.round(((view.percent ?? 0) / 100) * cells)
       return (
+        <Box flexDirection="column">
         <Box flexDirection="row" gap={1}>
           {view.percent === null ? null : (
             <Text color={view.percent >= 90 ? '#FF5555' : '#80FF20'} weight="bold">
@@ -411,6 +416,8 @@ export const register: Register = (on, options) => {
           <Text dimColor wrap="truncate-end">
             {view.line}
           </Text>
+        </Box>
+        {below}
         </Box>
       )
     }
@@ -433,8 +440,11 @@ export const register: Register = (on, options) => {
     // what shows is the game's tooltip alone; at the bottom it stops short of the bar.
     // The first, absolute box is the ground in the chat's colour that hides the
     // band's grey box; the bar stands on a layer of its own above it.
+    // What the plugins beneath drew comes before the bar in the tree, so the bar
+    // is painted over any ground of theirs, and the reversed column shows it
+    // under the bar.
     return (
-      <Box flexDirection="row" justifyContent="center">
+      <Box flexDirection="column-reverse" alignItems="center">
         <Box
           position="absolute"
           top={-BLEND_DOWN}
@@ -443,6 +453,8 @@ export const register: Register = (on, options) => {
           right={-BLEND_ACROSS}
           backgroundColor={BLEND_GROUND}
         />
+        {below}
+        <Box flexDirection="row" justifyContent="center">
         <Box key="xp" position="relative">
           <Svg source={bar} alt={view.alt} width={BAR_WIDTH} height={BAR_HEIGHT} />
           <Box position="absolute" display="none" hover={{ display: 'flex' }}>
@@ -450,6 +462,7 @@ export const register: Register = (on, options) => {
               <Svg source={card.source} alt={view.alt} width={card.width} height={card.height} />
             </Box>
           </Box>
+        </Box>
         </Box>
       </Box>
     )
