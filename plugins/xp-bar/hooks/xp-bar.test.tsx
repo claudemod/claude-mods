@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, SessionUsage } from 'claude-code'
 
-import { BAR_HEIGHT, BAR_WIDTH, TIP_MAX_WIDTH, xpTipSvg } from './bar-svg'
+import { BAR_HEIGHT, BAR_WIDTH, TIP_MAX_WIDTH, tierOf, xpTipSvg } from './bar-svg'
 import { GLYPH_ROWS, glyphNames, glyphRows } from './pixel-font'
 
 const BAND = {
@@ -240,6 +240,30 @@ test('auch mit langen Zeilen bleibt die Karte so schmal, wie die App sie zeigt',
     { text: '888 Mio. Tokens in diesem Chat', color: 'lore' },
   ])
   expect(card.width).toBeLessThanOrEqual(TIP_MAX_WIDTH * 2)
+})
+
+test('die Farbe der Leiste folgt dem Wochenlimit: grün, ab 70 % gelb, ab 80 % orange, ab 90 % rot', () => {
+  expect([0, 69.9, 70, 79.9, 80, 89.9, 90, 100].map(tierOf)).toEqual([
+    'green', 'green', 'yellow', 'yellow', 'orange', 'orange', 'red', 'red',
+  ])
+  expect(tierOf(null)).toBe('green')
+})
+
+test('bei 85 % der Woche zeichnet sich die Leiste orange', async ($, on) => {
+  engine(on, weekAt(85))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const source = String((await desktopBar($))?.props.source)
+  expect(source).toContain('fill="#F28C1B"')
+  expect(source).not.toContain('fill="#6FD81E"')
+})
+
+test('im Terminal hat die Leiste dieselbe Stufenfarbe', async ($, on) => {
+  engine(on, weekAt(95))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /^▰+$/ }))?.props.color).toBe('#FF5555')
+  await ui.unmount()
 })
 
 test('auf Englisch, wenn die Einstellung es sagt', { options: { language: 'en' } }, async ($, on) => {

@@ -62,10 +62,38 @@ ${body}
 // A growth under way: the level it grows from and how far into it this drawing comes.
 export type Grow = { fromPercent: number | null; elapsedMs: number }
 
-// The game's HUD: the level number centred above the bar, outlined in black.
-// While `grow` is under way the green grows from its old width to the new one,
-// picking up `elapsedMs` in, so a drawing made mid-growth carries on smoothly.
-export function xpBarSvg(percent: number | null, grow?: Grow) {
+// How much of the week's limit is gone, as the bar's colour tells it.
+export type Tier = 'green' | 'yellow' | 'orange' | 'red'
+
+// Green below 70 % of the week, yellow from 70, orange from 80, red from 90.
+export function tierOf(weekPercent: number | null): Tier {
+  const p = weekPercent ?? 0
+  return p >= 90 ? 'red' : p >= 80 ? 'orange' : p >= 70 ? 'yellow' : 'green'
+}
+
+// Each tier as the game shades its bar: the fill, a lighter top row, a darker
+// bottom row, and the empty track tinted to match.
+const TIER_COLORS: Record<Tier, { fill: string; top: string; bottom: string; track: string }> = {
+  green: { fill: '#6FD81E', top: '#B4FF6E', bottom: '#3E8E12', track: '#2E3A28' },
+  yellow: { fill: '#F2D21B', top: '#FFF27A', bottom: '#A88F0A', track: '#3A3722' },
+  orange: { fill: '#F28C1B', top: '#FFC27A', bottom: '#A8560A', track: '#3A2E22' },
+  red: { fill: '#E8342E', top: '#FF8A80', bottom: '#9A1A16', track: '#3A2424' },
+}
+
+// The terminal's bar in the same tiers, in the game's text colours.
+export const TIER_TEXT: Record<Tier, string> = {
+  green: '#80FF20',
+  yellow: '#FFFF55',
+  orange: '#FFAA00',
+  red: '#FF5555',
+}
+
+// The game's HUD: the level number centred above the bar, outlined in black,
+// the bar in its tier's colour. While `grow` is under way the fill grows from
+// its old width to the new one, picking up `elapsedMs` in, so a drawing made
+// mid-growth carries on smoothly.
+export function xpBarSvg(percent: number | null, grow?: Grow, tier: Tier = 'green') {
+  const colors = TIER_COLORS[tier]
   const to = fillWidth(percent)
   const from = fillWidth(grow?.fromPercent ?? percent)
   const notches = Array.from({ length: 17 }, (_, i) => {
@@ -89,11 +117,11 @@ export function xpBarSvg(percent: number | null, grow?: Grow) {
 <path id="level" d="${textPath(level, levelX, 1)}"/>
 </defs>
 <rect x="0" y="9" width="${BAR}" height="5" fill="#000"/>
-<rect x="1" y="10" width="${INNER}" height="3" fill="#2E3A28"/>
+<rect x="1" y="10" width="${INNER}" height="3" fill="${colors.track}"/>
 <g clip-path="url(#fill)">
-<rect x="1" y="10" width="${INNER}" height="3" fill="#6FD81E"/>
-<rect x="1" y="10" width="${INNER}" height="1" fill="#B4FF6E"/>
-<rect x="1" y="12" width="${INNER}" height="1" fill="#3E8E12"/>
+<rect x="1" y="10" width="${INNER}" height="3" fill="${colors.fill}"/>
+<rect x="1" y="10" width="${INNER}" height="1" fill="${colors.top}"/>
+<rect x="1" y="12" width="${INNER}" height="1" fill="${colors.bottom}"/>
 </g>
 ${notches}
 <use href="#level" x="-1" fill="#000"/><use href="#level" x="1" fill="#000"/><use href="#level" y="-1" fill="#000"/><use href="#level" y="1" fill="#000"/>

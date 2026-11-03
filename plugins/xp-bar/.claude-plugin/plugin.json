@@ -1,6 +1,6 @@
 {
   "name": "xp-bar",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Eine XP-Leiste im Minecraft-Stil über dem Chat zeigt dein Nutzungslimit und wie viele Tokens das ungefähr sind",
   "types": "./types/index.d.ts",
   "userConfig": {

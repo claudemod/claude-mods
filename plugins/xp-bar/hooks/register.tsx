@@ -2,8 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 
 import type { XpLimit } from '../types'
-import { BAR_HEIGHT, BAR_WIDTH, FILL_MS, TIP_TEXT_MAX_WIDTH, xpBarSvg, xpTipSvg } from './bar-svg'
-import type { TipLine } from './bar-svg'
+import { BAR_HEIGHT, BAR_WIDTH, FILL_MS, TIER_TEXT, TIP_TEXT_MAX_WIDTH, tierOf, xpBarSvg, xpTipSvg } from './bar-svg'
+import type { Tier, TipLine } from './bar-svg'
 import { languageOf, wordsFor } from './i18n'
 import type { Lang, Words } from './i18n'
 import { textWidth } from './pixel-font'
@@ -149,6 +149,8 @@ async function expireLimits($: EngineInterface, nowMs: number) {
 type View = {
   // The session (5-hour) window's use, 0 to 100; null before any reading.
   percent: number | null
+  // The bar's colour, from how much of the week is gone.
+  tier: Tier
   // The hover card: the name, each window with its tokens and its reset, the lore.
   lines: TipLine[]
   // The terminal's line beside its bar, which no pointer can hover.
@@ -188,6 +190,7 @@ async function describe($: EngineInterface, nowMs: number): Promise<View> {
   if (!shown) {
     return {
       percent: null,
+      tier: 'green',
       lines: [{ text: words.title, color: 'title' }, { text: words.firstAnswer, color: 'gray' }, null, lore],
       line: words.barFirstAnswer,
       alt: words.barFirstAnswer,
@@ -210,10 +213,12 @@ async function describe($: EngineInterface, nowMs: number): Promise<View> {
     return { label, tokens, reset }
   })
 
-  const forecast = weekForecast(words, current.find(l => l.kind === 'seven_day'), nowMs)
+  const week = current.find(l => l.kind === 'seven_day')
+  const forecast = weekForecast(words, week, nowMs)
 
   return {
     percent: Math.max(0, Math.min(100, shown.percentUsed)),
+    tier: tierOf(week?.percentUsed ?? null),
     lines: [
       { text: words.title, color: 'title' },
       ...windows.flatMap((w): TipLine[] => [
@@ -317,7 +322,7 @@ export const register: Register = (on, options) => {
             </Text>
           )}
           <Text>
-            <Text color="#80FF20">{'▰'.repeat(filled)}</Text>
+            <Text color={TIER_TEXT[view.tier]}>{'▰'.repeat(filled)}</Text>
             <Text dimColor>{'▱'.repeat(cells - filled)}</Text>
           </Text>
           <Text dimColor wrap="truncate-end">
@@ -333,7 +338,7 @@ export const register: Register = (on, options) => {
       grewAt = nowMs
     }
     const elapsedMs = nowMs - grewAt
-    const bar = xpBarSvg(view.percent, elapsedMs < FILL_MS ? { fromPercent, elapsedMs } : undefined)
+    const bar = xpBarSvg(view.percent, elapsedMs < FILL_MS ? { fromPercent, elapsedMs } : undefined, view.tier)
     const card = xpTipSvg(view.lines)
     const { Svg } = $.ui.resolve(e)
 
