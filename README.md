@@ -2,6 +2,8 @@
 
 Mods for the Claude Code desktop app, made by [@claudemod](https://www.tiktok.com/@claudemod) on TikTok.
 
+Unofficial community mods, not made by or affiliated with Anthropic.
+
 | Mod | What it does |
 | --- | --- |
 | [xp-bar](plugins/xp-bar) | A Minecraft-style XP bar above the prompt: your usage limit, roughly how many tokens that is, and when it refills |
@@ -46,7 +48,9 @@ Then start a new session. Or turn on auto-update for `claude-mods` under **Marke
 
 ## Deutsch
 
-Mods für die Claude-Code-Desktop-App. Installieren in Claude Code im Terminal:
+Mods für die Claude-Code-Desktop-App. Inoffizielle Community-Mods, nicht von Anthropic.
+
+Installieren in Claude Code im Terminal:
 
 ```
 /plugin marketplace add claudemod/claude-mods

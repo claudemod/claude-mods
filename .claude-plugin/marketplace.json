@@ -1,6 +1,6 @@
 {
   "name": "claude-mods",
-  "description": "Mods for the Claude Code desktop app, made by @claudemod",
+  "description": "Unofficial mods for the Claude Code desktop app, made by @claudemod (not affiliated with Anthropic)",
   "owner": { "name": "claudemod" },
   "plugins": [
     {
