@@ -11,6 +11,15 @@
       "author": { "name": "claudemod" },
       "category": "ui",
       "tags": ["mod", "usage", "limit", "xp-bar"]
+    },
+    {
+      "name": "craft-rush",
+      "displayName": "Craft Rush",
+      "source": "./plugins/craft-rush",
+      "description": "A crafting mini-game for the wait: random inventory, craft as much as you can before time runs out. Start it with /craft",
+      "author": { "name": "claudemod" },
+      "category": "game",
+      "tags": ["mod", "game", "crafting", "highscore"]
     }
   ]
 }
