@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 
-import type { XpLimit } from '../types'
+import type { XpLimit, XpTotals } from '../types'
 import { BAR_HEIGHT, BAR_WIDTH, FILL_MS, TIER_TEXT, TIP_TEXT_MAX_WIDTH, tierOf, xpBarSvg, xpTipSvg } from './bar-svg'
 import type { Tier, TipLine } from './bar-svg'
 import { languageOf, wordsFor } from './i18n'
@@ -17,6 +17,11 @@ const now = atom({ plugin: 'xp-bar', key: 'now' } as const, 0)
 const sessionTokens = atom({ plugin: 'xp-bar', key: 'sessionTokens' } as const, 0)
 // The language the bar speaks: the `language` option, or the system's when it is `auto`.
 const language = atom({ plugin: 'xp-bar', key: 'language' } as const, 'en')
+// What has been used in all, since the mod began counting (XpTotals).
+const totals = atom({ plugin: 'xp-bar', key: 'totals' } as const, null)
+// This process's own key for its tokens in the store: kept across a reload of
+// the mod, new for a resumed session, so no count is written twice.
+const processKey = atom({ plugin: 'xp-bar', key: 'processKey' } as const, '')
 
 // How far the tooltip reaches past the popover's padding, which would show its
 // grey ground: across in characters (the padding is 12 px, a character about
@@ -47,6 +52,14 @@ const MIN_SAMPLE_TOKENS = 1000
 // the bar before its first answer brings a reading of its own.
 const LAST_LIMITS = 'lastLimits'
 type StoredLimits = { at: number; limits: XpLimit[] }
+
+// The running totals, in the store so every session adds to the same count:
+// the highest reading each limit window reached (`peak.<kind>.<window>`, one
+// window per reset time to ten minutes, so sessions reading the same window
+// keep one peak), each process's tokens (`tokens.<process>`), and when counting began.
+const SINCE = 'since'
+const PEAK = 'peak.'
+const TOKENS = 'tokens.'
 
 type Anchor = { percent: number; resetsAt?: string; tokens: number }
 
@@ -109,6 +122,51 @@ async function setLimits($: EngineInterface, rateLimits: readonly SessionRateLim
   shownAt = at
   await update($, limits, () => kept)
   await $.store.set(LAST_LIMITS, { at, limits: kept } satisfies StoredLimits)
+  await recordPeaks($, kept, at)
+}
+
+// Keeps the highest reading each window reached; the sum over windows is how
+// many limits' worth has been used in all.
+async function recordPeaks($: EngineInterface, readings: readonly XpLimit[], at: number) {
+  if ((await $.store.get(SINCE)) === undefined) await $.store.set(SINCE, at)
+
+  for (const l of readings) {
+    if (!l.resetsAt) continue
+    const key = `${PEAK}${l.kind}.${Math.round(Date.parse(l.resetsAt) / 600_000)}`
+    const peak = (await $.store.get(key)) as number | undefined
+    if (peak === undefined || l.percentUsed > peak) await $.store.set(key, l.percentUsed)
+  }
+}
+
+// Sums the store into the totals the card shows, and writes them only when they changed.
+async function refreshTotals($: EngineInterface) {
+  const since = (await $.store.get(SINCE)) as number | undefined
+  if (since === undefined) return
+
+  let sessionLimits = 0
+  let weekLimits = 0
+  let tokens = 0
+  for (const key of await $.store.keys()) {
+    if (key.startsWith(PEAK)) {
+      const used = Number(await $.store.get(key)) / 100
+      if (key.startsWith(`${PEAK}five_hour.`)) sessionLimits += used
+      if (key.startsWith(`${PEAK}seven_day.`)) weekLimits += used
+    } else if (key.startsWith(TOKENS)) {
+      tokens += Number(await $.store.get(key)) || 0
+    }
+  }
+
+  const next: XpTotals = { since, sessionLimits, weekLimits, tokens }
+  const shown = await read($, totals)
+  if (JSON.stringify(shown) !== JSON.stringify(next)) await update($, totals, () => next)
+}
+
+// Writes this process's tokens under its own key, for the totals of every session.
+async function saveTokens($: EngineInterface) {
+  const key = await read($, processKey)
+  if (!key) return
+  const spent = await read($, sessionTokens)
+  if ((await $.store.get(`${TOKENS}${key}`)) !== spent) await $.store.set(`${TOKENS}${key}`, spent)
 }
 
 // Shows what another session (or an earlier one) read, when it is newer than what is shown.
@@ -181,6 +239,7 @@ async function describe($: EngineInterface, nowMs: number): Promise<View> {
   const all = await read($, limits)
   const perPercent = await read($, tokensPerPercent)
   const spent = await read($, sessionTokens)
+  const total = await read($, totals)
   const words = wordsFor(await read($, language))
 
   const current = all.map(l => (isPast(l, nowMs) ? { kind: l.kind, percentUsed: 0 } : l))
@@ -215,6 +274,17 @@ async function describe($: EngineInterface, nowMs: number): Promise<View> {
 
   const week = current.find(l => l.kind === 'seven_day')
   const forecast = weekForecast(words, week, nowMs)
+  // Everything used since the mod began counting, as the game shows a total.
+  const overall: TipLine[] = total
+    ? [
+        { text: words.totalSince(total.since), color: 'gray' },
+        { text: ` ${words.totalLimits(total.sessionLimits, total.weekLimits)}`, color: 'total' },
+        { text: ` ${words.totalTokens(total.tokens)}`, color: 'total' },
+      ]
+    : []
+  const overallText = total
+    ? `${words.totalSince(total.since)} ${words.totalLimits(total.sessionLimits, total.weekLimits)}, ${words.totalTokens(total.tokens)}`
+    : ''
 
   return {
     percent: Math.max(0, Math.min(100, shown.percentUsed)),
@@ -228,12 +298,17 @@ async function describe($: EngineInterface, nowMs: number): Promise<View> {
       ]),
       null,
       ...(forecast ? [{ text: words.pace, color: 'gray' } as const, forecast] : []),
+      ...overall,
       lore,
     ],
-    line: [...windows.map(w => `${w.label} · ${w.tokens} · ${w.reset}`), forecast?.text.trim() ?? '']
+    line: [...windows.map(w => `${w.label} · ${w.tokens} · ${w.reset}`), forecast?.text.trim() ?? '', overallText]
       .filter(Boolean)
       .join('  |  '),
-    alt: [...windows.map(w => `${w.label}: ${w.tokens}, ${w.reset}`), forecast ? `${words.pace} ${forecast.text.trim()}` : '']
+    alt: [
+      ...windows.map(w => `${w.label}: ${w.tokens}, ${w.reset}`),
+      forecast ? `${words.pace} ${forecast.text.trim()}` : '',
+      overallText,
+    ]
       .filter(Boolean)
       .join('. '),
   }
@@ -246,6 +321,12 @@ export const register: Register = (on, options) => {
     const chosen = options.language
     const lang = chosen === 'de' || chosen === 'en' ? chosen : await systemLanguage($)
     await update($, language, () => lang)
+
+    if (!(await read($, processKey))) {
+      const session = await $.session.id().catch(() => 'chat')
+      const id = `${session}.${(await $.clock.now()).toString(36)}${Math.random().toString(36).slice(2, 6)}`
+      await update($, processKey, () => id)
+    }
 
     const seeded: Record<string, number> = {}
     for (const key of await $.store.keys()) {
@@ -270,6 +351,8 @@ export const register: Register = (on, options) => {
       if ((await read($, now)) !== minute) await update($, now, () => minute)
       await adoptStoredLimits($)
       await expireLimits($, ms)
+      await saveTokens($)
+      await refreshTotals($)
     }
     await tick()
     $.clock.every(30_000, () => void tick())

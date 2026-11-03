@@ -82,7 +82,7 @@ test('auf dem Desktop: Pixel-Leiste im Band, die Details als Hover-Karte', async
   expect(bar?.props.width).toBe(BAR_WIDTH)
   expect(bar?.props.height).toBe(BAR_HEIGHT)
   expect(String(bar?.props.alt)).toMatch(
-    /^Sitzung 37,5 %: Tokens werden gemessen, Voll um \d\d:\d\d \(in 2h 13m\)\. Woche 12 %: Tokens werden gemessen, Voll Fr\.,? 06\.11\.,? \d\d:\d\d\. Bei deinem Tempo: Woche reicht bis zum Reset$/,
+    /^Sitzung 37,5 %: Tokens werden gemessen, Voll um \d\d:\d\d \(in 2h 13m\)\. Woche 12 %: Tokens werden gemessen, Voll Fr\.,? 06\.11\.,? \d\d:\d\d\. Bei deinem Tempo: Woche reicht bis zum Reset\. Insgesamt seit 02\.11\.: 0,4× Sitzung · 0,1× Woche, 0 Tokens in allen Chats$/,
   )
   expect(card?.props.alt).toBe(bar?.props.alt)
   expect(await ui.findAll({ type: 'Text' })).toHaveLength(0)
@@ -211,19 +211,19 @@ test('bei schnellem Tempo sagt die Karte, wann das Wochenlimit voll ist', async 
   engine(on, weekAt(60))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
-  expect(String((await desktopBar($))?.props.alt)).toMatch(/Bei deinem Tempo: Woche voll Do\.,? 05\.11\.,? \d\d:\d\d$/)
+  expect(String((await desktopBar($))?.props.alt)).toMatch(/Bei deinem Tempo: Woche voll Do\.,? 05\.11\.,? \d\d:\d\d\. Insgesamt/)
 })
 
 test('bei ruhigem Tempo reicht die Woche bis zum Reset', async ($, on) => {
   engine(on, weekAt(20))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(String((await desktopBar($))?.props.alt)).toMatch(/Bei deinem Tempo: Woche reicht bis zum Reset$/)
+  expect(String((await desktopBar($))?.props.alt)).toMatch(/Bei deinem Tempo: Woche reicht bis zum Reset\. Insgesamt/)
 })
 
 test('unter 1 % ist das Tempo noch nicht messbar', async ($, on) => {
   engine(on, weekAt(0.5))
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
-  expect(String((await desktopBar($))?.props.alt)).toMatch(/Bei deinem Tempo: Woche: Tempo wird gemessen$/)
+  expect(String((await desktopBar($))?.props.alt)).toMatch(/Bei deinem Tempo: Woche: Tempo wird gemessen\. Insgesamt/)
 })
 
 test('auch mit langen Zeilen bleibt die Karte so schmal, wie die App sie zeigt', () => {
@@ -237,6 +237,9 @@ test('auch mit langen Zeilen bleibt die Karte so schmal, wie die App sie zeigt',
     null,
     { text: 'Bei deinem Tempo:', color: 'gray' },
     { text: ' Woche voll Mi. 30.12. 23:59', color: 'warn' },
+    { text: 'Insgesamt seit 30.12.:', color: 'gray' },
+    { text: ' 888,8× Sitzung · 88,8× Woche', color: 'total' },
+    { text: ' 888 Mio. Tokens in allen Chats', color: 'total' },
     { text: '888 Mio. Tokens in diesem Chat', color: 'lore' },
   ])
   expect(card.width).toBeLessThanOrEqual(TIP_MAX_WIDTH * 2)
@@ -271,7 +274,7 @@ test('auf Englisch, wenn die Einstellung es sagt', { options: { language: 'en' }
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
   expect(String((await desktopBar($))?.props.alt)).toMatch(
-    /^Session 37\.5%: ≈ 6\.3M tokens left, Full at \d{1,2}(:\d\d)? (AM|PM) \(in 2h 13m\)\. Week 12%: Measuring tokens, Full Fri 11\/6, \d{1,2}(:\d\d)? (AM|PM)\. At your pace: Week lasts until the reset$/,
+    /^Session 37\.5%: ≈ 6\.3M tokens left, Full at \d{1,2}(:\d\d)? (AM|PM) \(in 2h 13m\)\. Week 12%: Measuring tokens, Full Fri 11\/6, \d{1,2}(:\d\d)? (AM|PM)\. At your pace: Week lasts until the reset\. Total since 11\/2: 0\.4× session · 0\.1× week, 0 tokens in all chats$/,
   )
 })
 
@@ -306,9 +309,51 @@ test('im Terminal auf Englisch', { options: { language: 'en' } }, async ($, on) 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
 
   expect(
-    await ui.find({ type: 'Text', text: /^Session 37\.5% · Measuring tokens · Full at .*\|  Week full Thu 11\/5, \d{1,2}:\d\d (AM|PM)$/ }),
+    await ui.find({
+      type: 'Text',
+      text: /^Session 37\.5% · Measuring tokens · Full at .*\|  Week full Thu 11\/5, \d{1,2}:\d\d (AM|PM)  \|  Total since 11\/2: 0\.4× session · 0\.6× week, 0 tokens in all chats$/,
+    }),
   ).toBeDefined()
   await ui.unmount()
+})
+
+// The window USAGE's session reading belongs to, as the store keys its peak.
+const SESSION_WINDOW = `peak.five_hour.${Math.round(Date.parse('2026-11-02T18:00:00Z') / 600_000)}`
+
+test('insgesamt zählt jedes Fenster mit seinem höchsten Stand und die Tokens aller Chats', async ($, on) => {
+  engine(on, USAGE, {
+    since: Date.parse('2026-11-01T10:00:00Z'),
+    'peak.five_hour.1': 100,
+    'peak.five_hour.2': 50,
+    'peak.seven_day.3': 80,
+    'tokens.chat-a': 2_000_000,
+    'tokens.chat-b': 500_000,
+  })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  // Sessions: 100 + 50 + 37.5 % is 1.9 limits; weeks: 80 + 12 % is 0.9.
+  expect(String((await desktopBar($))?.props.alt)).toMatch(
+    /Insgesamt seit 01\.11\.: 1,9× Sitzung · 0,9× Woche, 2,5 Mio\. Tokens in allen Chats$/,
+  )
+})
+
+test('ein Fenster zählt nur einmal, mit seinem höchsten Stand', async ($, on) => {
+  const { store } = engine(on, USAGE, { [SESSION_WINDOW]: 60 })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  // The live 37.5 % is below the 60 % another session saw in the same window.
+  expect(store.get(SESSION_WINDOW)).toBe(60)
+  expect(String((await desktopBar($))?.props.alt)).toMatch(/: 0,6× Sitzung · 0,1× Woche/)
+})
+
+test('die Tokens dieses Chats landen unter seinem eigenen Schlüssel', async ($, on) => {
+  const { store } = engine(on, USAGE)
+  on('session.id', () => ({ value: 'chat-1' }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const keys = [...store.keys()].filter(key => key.startsWith('tokens.'))
+  expect(keys).toHaveLength(1)
+  expect(keys[0]).toMatch(/^tokens\.chat-1\./)
 })
 
 test('ohne jede Messung erklärt die Hover-Karte, wann die Leiste kommt', async ($, on) => {

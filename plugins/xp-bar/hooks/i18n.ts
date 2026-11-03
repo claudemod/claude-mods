@@ -15,6 +15,10 @@ const DAY = {
   de: new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }),
   en: new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
 }
+const DATE = {
+  de: new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' }),
+  en: new Intl.DateTimeFormat('en-US', { month: 'numeric', day: 'numeric' }),
+}
 
 // The pixel font has a plain space only; ICU puts narrow and no-break ones in times.
 function plainSpaces(text: string) {
@@ -61,6 +65,12 @@ function percent(lang: Lang, p: number) {
   return lang === 'de' ? `${String(rounded).replace('.', ',')} %` : `${rounded}%`
 }
 
+// "12,4" or "12.4": limits' worth, to a tenth
+function times(lang: Lang, n: number) {
+  const text = (Math.round(n * 10) / 10).toFixed(1)
+  return lang === 'de' ? text.replace('.', ',') : text
+}
+
 // "6,3 Mio.", "845 Tsd." or "6.3M", "845K"
 function amount(lang: Lang, n: number) {
   const units = lang === 'de' ? [' Mrd.', ' Mio.', ' Tsd.'] : ['B', 'M', 'K']
@@ -95,6 +105,12 @@ export function wordsFor(lang: Lang) {
     measuringPace: de ? 'Woche: Tempo wird gemessen' : 'Week: measuring pace',
     chatTokens: (n: number) => (de ? `${amount(lang, n)} Tokens in diesem Chat` : `${amount(lang, n)} tokens in this chat`),
     firstAnswer: de ? 'Kommt mit der ersten Antwort' : 'Shows after the first answer',
+    totalSince: (ms: number) => `${de ? 'Insgesamt seit' : 'Total since'} ${plainSpaces(DATE[lang].format(ms))}:`,
+    totalLimits: (session: number, week: number) =>
+      de
+        ? `${times(lang, session)}× Sitzung · ${times(lang, week)}× Woche`
+        : `${times(lang, session)}× session · ${times(lang, week)}× week`,
+    totalTokens: (n: number) => (de ? `${amount(lang, n)} Tokens in allen Chats` : `${amount(lang, n)} tokens in all chats`),
     barFirstAnswer: de ? 'XP-Leiste erscheint nach der ersten Antwort' : 'XP bar shows after the first answer',
   }
 }

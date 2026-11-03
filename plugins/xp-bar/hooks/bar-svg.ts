@@ -36,6 +36,7 @@ const TIP_COLORS = {
   value: '#5555FF', // its attribute modifiers
   warn: '#FFAA00', // gold, a warning
   good: '#55FF55', // green, all is well
+  total: '#00AAAA', // dark aqua, the running totals
   lore: '#AA00AA', // its lore
 } as const
 
