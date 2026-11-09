@@ -29,6 +29,15 @@
       "author": { "name": "claudemod" },
       "category": "ui",
       "tags": ["mod", "modes", "tokens", "effort"]
+    },
+    {
+      "name": "agent-buddies",
+      "displayName": "Agent Buddies",
+      "source": "./plugins/agent-buddies",
+      "description": "Every agent Claude sends out gets its own little blocky buddy in its own colour, with a live, clickable list of what it is doing",
+      "author": { "name": "claudemod" },
+      "category": "ui",
+      "tags": ["mod", "agents", "subagents", "tools"]
     }
   ]
 }
