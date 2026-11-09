@@ -38,6 +38,15 @@
       "author": { "name": "claudemod" },
       "category": "ui",
       "tags": ["mod", "agents", "subagents", "tools"]
+    },
+    {
+      "name": "claudesurfers",
+      "displayName": "ClaudeSurfers",
+      "source": "./plugins/claudesurfers",
+      "description": "A three-lane surf runner for the wait: dodge rate limits and merge conflicts, collect tokens, unlock buddies – just type /surf",
+      "author": { "name": "claudemod" },
+      "category": "game",
+      "tags": ["mod", "game", "runner", "highscore"]
     }
   ]
 }

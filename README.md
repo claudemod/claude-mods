@@ -10,6 +10,7 @@ Unofficial community mods, not made by or affiliated with Anthropic.
 | [craft-rush](plugins/craft-rush) | A crafting mini-game for the wait: random inventory, craft as much as you can before time runs out. Start it with `/craft` |
 | [mode-bar](plugins/mode-bar) | Ten one-click modes above the chat that make Claude cheaper, faster or more careful, plus a traffic light for how heavy the current task is |
 | [agent-buddies](plugins/agent-buddies) | Every agent Claude sends out gets its own little blocky buddy in its own colour, with a live, clickable list of what it is doing |
+| [claudesurfers](plugins/claudesurfers) | A three-lane surf runner for the wait: dodge rate limits and merge conflicts, collect tokens, unlock buddies. Start it with `/surf` |
 
 ## Install
 
@@ -21,6 +22,7 @@ In Claude Code in your terminal, add the marketplace once, then install the mods
 /plugin install craft-rush@claude-mods
 /plugin install mode-bar@claude-mods
 /plugin install agent-buddies@claude-mods
+/plugin install claudesurfers@claude-mods
 ```
 
 From your shell, without starting a session, it's the same without the slash:
@@ -31,9 +33,10 @@ claude plugin install xp-bar@claude-mods
 claude plugin install craft-rush@claude-mods
 claude plugin install mode-bar@claude-mods
 claude plugin install agent-buddies@claude-mods
+claude plugin install claudesurfers@claude-mods
 ```
 
-**In the desktop app:** click **+** next to the prompt, open **Add plugins** (or **Plugins → Browse plugins**), choose **Add marketplace**, enter `claudemod/claude-mods`, then install **XP Bar**, **Craft Rush**, **Mode Bar** or **Agent Buddies**.
+**In the desktop app:** click **+** next to the prompt, open **Add plugins** (or **Plugins → Browse plugins**), choose **Add marketplace**, enter `claudemod/claude-mods`, then install **XP Bar**, **Craft Rush**, **Mode Bar**, **Agent Buddies** or **ClaudeSurfers**.
 
 Already added the marketplace for another mod? Run `claude plugin marketplace update claude-mods` (or `/plugin marketplace update claude-mods`) first, otherwise the new mod isn't found.
 
@@ -42,6 +45,8 @@ Start a new session afterwards and the mods show up. Play Craft Rush with `/craf
 The Mode Bar appears after your first message in a chat. To start a chat in a mode right away, send `/mode brief` (by name or number, optionally followed by your prompt). Using it together with the XP Bar? You need XP Bar 0.11.0 or newer: `claude plugin update xp-bar@claude-mods`.
 
 Agent Buddies opens a panel beside the chat when Claude sends out an agent. `/buddies` opens it by hand.
+
+Play ClaudeSurfers with `/surf`, or go straight to your buddies with `/surf buddies`.
 
 All mods speak English or German and follow your system language. To pick one yourself, run `/plugin configure xp-bar@claude-mods` (or `craft-rush@claude-mods`) in Claude Code in your terminal.
 
@@ -76,9 +81,10 @@ Installieren in Claude Code im Terminal:
 /plugin install craft-rush@claude-mods
 /plugin install mode-bar@claude-mods
 /plugin install agent-buddies@claude-mods
+/plugin install claudesurfers@claude-mods
 ```
 
-In der Desktop-App: **+** neben dem Eingabefeld → **Add plugins** (oder **Plugins → Browse plugins**) → **Add marketplace** → `claudemod/claude-mods` eingeben → **XP Bar**, **Craft Rush**, **Mode Bar** oder **Agent Buddies** installieren. Danach eine neue Sitzung starten. Craft Rush startet mit `/craft`. Die Mode Bar erscheint nach der ersten Nachricht, mit `/modus knapp` startet ein Chat direkt in einem Modus. Zusammen mit der XP-Leiste braucht sie XP-Leiste 0.11.0 oder neuer (`claude plugin update xp-bar@claude-mods`).
+In der Desktop-App: **+** neben dem Eingabefeld → **Add plugins** (oder **Plugins → Browse plugins**) → **Add marketplace** → `claudemod/claude-mods` eingeben → **XP Bar**, **Craft Rush**, **Mode Bar**, **Agent Buddies** oder **ClaudeSurfers** installieren. Danach eine neue Sitzung starten. Craft Rush startet mit `/craft`, ClaudeSurfers mit `/surf`. Die Mode Bar erscheint nach der ersten Nachricht, mit `/modus knapp` startet ein Chat direkt in einem Modus. Zusammen mit der XP-Leiste braucht sie XP-Leiste 0.11.0 oder neuer (`claude plugin update xp-bar@claude-mods`).
 
 Marktplatz schon für einen anderen Mod hinzugefügt? Dann vorher `claude plugin marketplace update claude-mods` ausführen, sonst wird der neue Mod nicht gefunden.
 
