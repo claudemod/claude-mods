@@ -35,6 +35,11 @@ export type Agent = {
   model: string
   answer: string
   tokens: number
+  // The agent's own to-do list, where it keeps one: how far it says it is.
+  todos?: { done: number; active: number; total: number }
+  // How many steps finished agents of its type took before, for the estimate.
+  expected?: number
+  samples?: number
   // Every call it made; `steps` keeps only the latest ones.
   total: number
   counts: Record<string, number>
@@ -68,6 +73,8 @@ export type CardProps = {
   hasPictures: boolean
   rows: CardRow[]
   strip: Segment[]
+  // 0..1: how far the strip reaches; 1 once the agent has stopped.
+  progress: number
   // The Craft Skin: blocky figure, pixel words, a card like an item's tooltip.
   isCraftSkin: boolean
 }
@@ -83,6 +90,8 @@ export type Phase = {
   errors: string
   took: string
   isOpen: boolean
+  // The person opened it themselves: it is folded for room only as a last resort.
+  isPinned: boolean
   rows: DetailRow[]
 }
 
@@ -106,8 +115,12 @@ export type DetailProps = {
   startedAt: number
   tabs: Tab[]
   strip: Segment[]
+  progress: number
+  // How the progress was found, e.g. "3 von 5 Aufgaben" or "geschätzt".
+  basis: string
   legend: { kind: Kind; label: string; count: number }[]
-  words: { back: string; task: string; flow: string; result: string; waiting: string; noSteps: string }
+  // `earlier` holds {n} for the number of steps left out.
+  words: { back: string; task: string; flow: string; result: string; waiting: string; noSteps: string; earlier: string }
   task: Fold
   phases: Phase[]
   result: Fold | null
@@ -118,6 +131,7 @@ export type CardMessage =
   | { kind: 'agent'; id: string }
   | { kind: 'back' }
   | { kind: 'toggle'; id: string }
+  | { kind: 'phase'; id: string; open: boolean }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -129,6 +143,8 @@ declare module 'claude-code' {
       agents: Shaped<Agent[]>
       open: string[]
       expanded: string[]
+      // Phases the person opened (+id) or closed (-id) themselves.
+      phases: string[]
       // The agent whose detail view is shown; '' for the list.
       focus: string
       language: Lang

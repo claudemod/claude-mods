@@ -49,14 +49,25 @@ const px = (x: number, y: number, w: number, tall: number, fill: string) =>
 const flip = (from: string, to: string, dur: string, begin: string) =>
   `<animate attributeName='opacity' values='${from};${to}' dur='${dur}' begin='${begin}' calcMode='discrete' repeatCount='indefinite'/>`
 
+// Pixel art as one path per colour, each row's runs a line one pixel thick:
+// a tenth of the size of a rect per pixel, which a drawing's budget needs.
+export function pixelPaths(rows: readonly string[], ink: Record<string, string>, ox = 0, oy = 0) {
+  const runs = new Map<string, string>()
+  rows.forEach((row, j) => {
+    let i = 0
+    while (i < row.length) {
+      const c = row[i] as string
+      let n = 1
+      while (row[i + n] === c) n++
+      if (c !== '.' && ink[c]) runs.set(ink[c] as string, `${runs.get(ink[c] as string) ?? ''}M${ox + i} ${oy + j + 0.5}h${n}`)
+      i += n
+    }
+  })
+  return [...runs].map(([color, d]) => `<path stroke='${color}' d='${d}'/>`).join('')
+}
+
 function itemRects(item: Item) {
-  return item.rows
-    .map((row, j) =>
-      [...row]
-        .map((c, i) => (c === '.' ? '' : px(17 + i, 2 + j, 1, 1, item.ink[c] ?? '#000')))
-        .join(''),
-    )
-    .join('')
+  return pixelPaths(item.rows, item.ink, 17, 2)
 }
 
 function bodyRects(color: string) {
@@ -181,13 +192,7 @@ const TOOL_X = 17
 const TOOL_Y = 3
 
 function craftItemRects(item: Item) {
-  return item.rows
-    .map((row, j) =>
-      [...row]
-        .map((c, i) => (c === '.' ? '' : px(TOOL_X + i, TOOL_Y + j, 1, 1, item.ink[c] ?? '#000')))
-        .join(''),
-    )
-    .join('')
+  return pixelPaths(item.rows, item.ink, TOOL_X, TOOL_Y)
 }
 
 // The dark slot the figure stands in, lit from the bottom right like a game's
@@ -310,7 +315,7 @@ export function craftHeadingSvg(text: string, scale: number, color: string) {
 const open7 = `<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 7 7' shape-rendering='crispEdges'>`
 
 function cells(rows: readonly string[], ink: string) {
-  return rows.map((row, j) => [...row].map((c, i) => (c === '#' ? px(i, j, 1, 1, ink) : '')).join('')).join('')
+  return pixelPaths(rows, { '#': ink })
 }
 
 export function craftStepIconSvg(state: StepState, color: string) {
@@ -337,16 +342,15 @@ export const CRAFT_KIND_INK: Record<Kind, string> = { read: '#5555FF', search: '
 export function kindIconSvg(kind: Kind, isCraft: boolean) {
   const item = isCraft ? CRAFT_ITEMS[KIND_HELD[kind]] : ITEMS[KIND_HELD[kind]]
   const size = item.rows.length
-  const rects = item.rows
-    .map((row, j) => [...row].map((c, i) => (c === '.' ? '' : px(i, j, 1, 1, item.ink[c] ?? '#000'))).join(''))
-    .join('')
+  const rects = pixelPaths(item.rows, item.ink)
   return `<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 ${size} ${size}' shape-rendering='crispEdges'>${rects}</svg>`
 }
 
 // The activity strip: every step a piece as wide as it took, in its kind's
 // colour, so the whole run reads at a glance. A step still running pulses,
 // one that failed is marked red underneath.
-export function stripSvg(segments: readonly Segment[], widthPx: number, heightPx: number, isCraft: boolean) {
+// `progress` (0..1) is how far the steps reach; the rest is the empty track.
+export function stripSvg(segments: readonly Segment[], widthPx: number, heightPx: number, isCraft: boolean, progress = 1) {
   const ink = isCraft ? CRAFT_KIND_INK : KIND_INK
   const w = Math.max(40, Math.round(widthPx))
   const h = Math.max(4, Math.round(heightPx))
@@ -356,12 +360,13 @@ export function stripSvg(segments: readonly Segment[], widthPx: number, heightPx
   const ground = isCraft ? `<rect x='0' y='${top}' width='${w}' height='${bar}' fill='#2A2A2A'/>` : `<rect x='0' y='${top}' width='${w}' height='${bar}' rx='${bar / 2}' fill='rgba(128,128,128,.18)'/>`
   if (segments.length === 0) return `${open}${ground}</svg>`
   const total = segments.reduce((sum, s) => sum + s.weight, 0)
+  const reach = Math.max(segments.length * 2, Math.round(w * Math.min(1, Math.max(0, progress))))
   const gap = segments.length > 40 ? 0 : 1
-  const room = w - gap * (segments.length - 1)
+  const room = reach - gap * (segments.length - 1)
   let x = 0
   const parts = segments
     .map((s, i) => {
-      const width = i === segments.length - 1 ? Math.max(1, w - x) : Math.max(1, (s.weight / total) * room)
+      const width = i === segments.length - 1 ? Math.max(1, reach - x) : Math.max(1, (s.weight / total) * room)
       const at = x
       x += width + gap
       const fill = ink[s.kind]

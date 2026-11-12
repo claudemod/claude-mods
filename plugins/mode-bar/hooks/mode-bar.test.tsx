@@ -2,7 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { CommandRunInput, On, PromptSubmitInput, SessionUsage, TurnStepResult } from 'claude-code'
 
-import type { PillsProps } from '../types'
+import type { HotbarProps, PillsProps } from '../types'
+import { hotbarTargetAt, slotted } from './hotbar-art'
 import { layoutTiles } from './layout'
 import { parseMode } from './modes'
 
@@ -32,6 +33,7 @@ const BAND = {
   requestId: 'above-prompt',
   props: {
     hasSurvey: false,
+    isCollapsed: false,
     isWorking: false,
     maxRows: 10,
     bodyColumns: 100,
@@ -236,17 +238,18 @@ test('auf dem Desktop: Zeiger auf einer Pille zeigt, was der Modus macht; ein Kl
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
 
-  // One row, centred in 98 columns: Spar at 39–43, Normal at 45–51, Plan at 53–57;
-  // the tiles start at row 1.5, the light's line is row 0.
-  await ui.pointer({ type: 'move', x: 54, y: 2 })
+  // One row on an even grid, centred in 98 columns, 7 columns a tile, 3 apart:
+  // Spar at 35–41, Normal at 45–51, Plan at 55–61; the tiles start at row 1.5,
+  // the light's line is row 0.
+  await ui.pointer({ type: 'move', x: 57, y: 2 })
   expect(await ui.find({ type: 'Text', text: /Nur planen\./, in: 'mode-pills' })).toBeDefined()
-  await ui.pointer({ type: 'move', x: 44, y: 2 })
+  await ui.pointer({ type: 'move', x: 43, y: 2 })
   expect(await ui.find({ type: 'Text', text: /Nur planen|Wie immer|wenig Effort/, in: 'mode-pills' })).toBeUndefined()
 
-  await ui.pointer({ type: 'down', x: 40, y: 3, button: 'left' })
-  await ui.pointer({ type: 'up', x: 40, y: 3, button: 'left' })
+  await ui.pointer({ type: 'down', x: 37, y: 3, button: 'left' })
+  await ui.pointer({ type: 'up', x: 37, y: 3, button: 'left' })
   // The pointer on the light shows its figures on the same line.
-  await ui.pointer({ type: 'move', x: 41, y: 0 })
+  await ui.pointer({ type: 'move', x: 37, y: 0 })
   expect(await ui.find({ type: 'Text', text: /^Noch keine Aufgabe gemessen  ·  Grün unter 50k/, in: 'mode-pills' })).toBeDefined()
   expect(toasts.at(-1)).toBe('Modus Spar: Haiku, wenig Effort.')
   expect(((await ui.find({ key: 'mode-pills' }))?.props.props as PillsProps).active).toBe('eco')
@@ -368,11 +371,96 @@ test('pausiert die App den Chat, kommt er mit seinem Modus zurück', async ($, o
 test('alle zehn Kacheln stehen immer in einer Reihe, auch im schmalen Fenster', () => {
   const names = ['Spar', 'Schnell', 'Knapp', 'Normal', 'Plan', 'Prüfen', 'Erklären', 'Debug', 'Test', 'Gründlich']
   const items = names.map(label => ({ id: label, label }))
-  for (const columns of [120, 80, 74, 60, 45]) {
+  for (const columns of [160, 120, 80, 74, 60, 45, 35, 22, 20]) {
     const { placed } = layoutTiles(items, columns)
     expect(placed).toHaveLength(10)
     const last = placed[9]
     expect((last?.x ?? 0) + (last?.w ?? 0)).toBeLessThanOrEqual(columns)
     for (let i = 1; i < 10; i++) expect((placed[i]?.x ?? 0) >= (placed[i - 1]?.x ?? 0) + (placed[i - 1]?.w ?? 0)).toBe(true)
   }
+})
+
+test('im schmalen Fenster nur Kacheln, der aktive Modus steht dann auf der Infozeile', async ($, on) => {
+  // Ten modes, as people have them: no room for ten names in 40 columns.
+  const ten: Record<string, string> = { '04-normal.md': FILES['04-normal.md'] ?? '' }
+  for (const [i, name] of ['Spar', 'Schnell', 'Knapp', 'Plan', 'Prüfen', 'Erklären', 'Debug', 'Test', 'Gründlich'].entries()) {
+    ten[`${10 + i}-m${i}.md`] = `---\nlabel: ${name}\nlabel_de: ${name}\ncolor: "#5E9E6E"\nhint: x\nhint_de: x\n---\n`
+  }
+  engine(on, undefined, ten)
+  await start($)
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 42 }, surface: 'desktop' })
+  const texts = (await ui.findAll({ type: 'Text', in: 'mode-pills' })).map(t => t.text)
+  expect(texts).not.toContain('Spar')
+  expect(texts.join(' ')).toContain('Normal')
+  expect(svgs(await ui.drawn({ in: 'mode-pills' })).filter(p => p.alt === 'Spar' || p.alt === 'Plan')).toHaveLength(2)
+  await ui.unmount()
+})
+
+test('die Kacheln passen sich der Fensterbreite an: Raster, Namen, nur Kacheln, kleiner', () => {
+  const names = ['Spar', 'Schnell', 'Knapp', 'Normal', 'Plan', 'Prüfen', 'Erklären', 'Debug', 'Test', 'Gründlich']
+  const items = names.map(label => ({ id: label, label }))
+  const at = (columns: number) => layoutTiles(items, columns)
+  // Wide: all tiles as wide as the widest name, with more air between them.
+  expect(at(140)).toMatchObject({ fit: 'even', gap: 3, hasNames: true, tilePx: 28 })
+  expect(new Set(at(140).placed.map(p => p.w)).size).toBe(1)
+  // A little narrower: the names set the widths.
+  expect(at(80)).toMatchObject({ fit: 'named', hasNames: true })
+  // No room for the names: the tiles alone, then smaller ones.
+  expect(at(60)).toMatchObject({ fit: 'icons', hasNames: false, tilePx: 28 })
+  expect(at(35)).toMatchObject({ fit: 'small', hasNames: false, tilePx: 22 })
+  expect(at(22)).toMatchObject({ fit: 'tiny', hasNames: false, tilePx: 15 })
+  // A tile's picture always fits its columns (a column is at least 7.5 pixels).
+  for (const columns of [140, 80, 60, 35, 22]) {
+    const layout = at(columns)
+    for (const p of layout.placed) expect(p.w * 7.5).toBeGreaterThanOrEqual(layout.tilePx)
+  }
+})
+
+// The Craft Skin belongs to the XP bar; here it answers as that mod would.
+function craftSkinOn(on: On) {
+  on('state.get', (_, e, next) => (e.plugin === 'xp-bar' && e.key === 'craftSkin' ? { value: { value: true, version: 1 } } : next(e)))
+}
+
+test('mit dem Craft-Skin stehen die Modi in einer Hotbar; ein Klick auf den Slot wählt', async ($, on) => {
+  const { sent, toasts } = engine(on)
+  craftSkinOn(on)
+  await start($)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+
+  expect(await ui.find({ key: 'mode-pills' })).toBeUndefined()
+  const hotbar = await ui.find({ key: 'mode-hotbar' })
+  expect(hotbar?.props.module).toBe('hooks/hotbar.tsx')
+  expect((hotbar?.props.props as HotbarProps).active).toBe('normal')
+  expect((hotbar?.props.props as HotbarProps).pills.map(p => p.id)).toEqual(['eco', 'normal', 'plan'])
+
+  // 61 cells across 240 game pixels: slot 0 from x = 8, slot 1 from x = 12.
+  await ui.resize({ columns: 61, rows: 3, in: 'mode-hotbar' })
+  const [frame] = svgs(await ui.drawn({ in: 'mode-hotbar' }))
+  expect(frame?.source).toContain('#E8E8E8')
+
+  await ui.pointer({ type: 'move', x: 9, y: 1, in: 'mode-hotbar' })
+  expect(await ui.find({ type: 'Text', text: 'Haiku, wenig Effort.', in: 'mode-hotbar' })).toBeDefined()
+  await ui.pointer({ type: 'down', x: 9, y: 1, button: 'left', in: 'mode-hotbar' })
+  await ui.pointer({ type: 'up', x: 9, y: 1, button: 'left', in: 'mode-hotbar' })
+  expect(toasts.at(-1)).toBe('Modus Spar: Haiku, wenig Effort.')
+  expect(((await ui.find({ key: 'mode-hotbar' }))?.props.props as HotbarProps).active).toBe('eco')
+  await step($)
+  expect(sent.at(-1)).toEqual({ model: 'haiku', effort: 'low' })
+
+  // The lamp's slot picks nothing and tells the figures.
+  await ui.pointer({ type: 'move', x: 2, y: 1, in: 'mode-hotbar' })
+  expect(await ui.find({ type: 'Text', text: /Grün unter 50k/, in: 'mode-hotbar' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('die Hotbar hat zehn Slots: steht der aktive Modus weiter hinten, nimmt er den letzten', () => {
+  const items = Array.from({ length: 13 }, (_, i) => ({ id: `m${i}`, label: `M${i}` }))
+  expect(slotted(items, 'm3').map(i => i.id)).toEqual(items.slice(0, 10).map(i => i.id))
+  expect(slotted(items, 'm12').at(-1)?.id).toBe('m12')
+  expect(slotted(items, 'm12')).toHaveLength(10)
+  expect(hotbarTargetAt(40 / 240)).toBe(0)
+  expect(hotbarTargetAt(209 / 240)).toBe(9)
+  expect(hotbarTargetAt(10 / 240)).toBe('lamp')
+  expect(hotbarTargetAt(25 / 240)).toBeNull()
+  expect(hotbarTargetAt(220 / 240)).toBeNull()
 })

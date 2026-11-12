@@ -1,8 +1,8 @@
 import type { ClientModule, ClientPointerEvent, RenderElement } from 'claude-code'
 
 import type { PillsProps } from '../types'
-import { INFO_ROWS, LIGHT, LIGHT_COLUMNS, NAME_ROWS, TILES_Y, TILE_PX, TILE_ROWS, layoutTiles, targetAt } from './layout'
-import type { Placed } from './layout'
+import { INFO_ROWS, LIGHT, LIGHT_COLUMNS, NAME_ROWS, TILES_Y, layoutTiles, targetAt } from './layout'
+import type { Layout } from './layout'
 import { tileSvg } from './tiles'
 
 // The mode tiles on the desktop, drawn like app icons in one row right above
@@ -15,7 +15,7 @@ import { tileSvg } from './tiles'
 type Local = { hover: string | null; pressed: string | null }
 
 let current: PillsProps = { pills: [], active: '', columns: 0, light: { source: '', alt: '', amount: '', isRunning: false, lines: [] } }
-let drawn: Placed[] = []
+let drawn: Layout | null = null
 
 const LIGHT_PX = { width: 38, height: 16 }
 
@@ -28,7 +28,7 @@ const Tiles: ClientModule<PillsProps, Local> = (props, surface) => {
     surface.setState(local())
     surface.onPointer((event: ClientPointerEvent) => {
       const now = local()
-      const hover = event.type === 'leave' ? null : (targetAt(drawn, event.x, event.y) ?? null)
+      const hover = event.type === 'leave' || !drawn ? null : (targetAt(drawn, event.x, event.y) ?? null)
       if (event.type === 'down' && event.button === 'left') {
         surface.setState({ hover, pressed: hover })
         return
@@ -43,11 +43,12 @@ const Tiles: ClientModule<PillsProps, Local> = (props, surface) => {
   }
 
   const { hover } = local()
-  const { placed, gap, left } = layoutTiles(
+  const layout = layoutTiles(
     current.pills.map(p => ({ id: p.id, label: p.label })),
     current.columns > 0 ? current.columns : surface.columns,
   )
-  drawn = placed
+  const { placed, gap, left, tilePx, tileRows, hasNames } = layout
+  drawn = layout
 
   const Svg = (surface.elements as unknown as Record<string, ((p: object) => RenderElement) | undefined>).Svg
   const picture = (source: string, alt: string, width: number, height: number): RenderElement => {
@@ -62,20 +63,23 @@ const Tiles: ClientModule<PillsProps, Local> = (props, surface) => {
     const state = isActive ? 'active' : item.id === hover ? 'hover' : 'rest'
     return (
       <Box width={p.w} flexDirection="column" alignItems="center" marginLeft={i > 0 ? gap : 0}>
-        <Box height={TILE_ROWS} alignItems="center" justifyContent="center">
-          {picture(tileSvg(item.id, item.label, item.color, state), item.label, TILE_PX, TILE_PX)}
+        <Box height={tileRows} alignItems="center" justifyContent="center">
+          {picture(tileSvg(item.id, item.label, item.color, state, tilePx), item.label, tilePx, tilePx)}
         </Box>
-        <Box height={NAME_ROWS} justifyContent="center">
-          <Text size="footnote" weight={isActive ? 'semibold' : 'medium'} dimColor={!isActive && item.id !== hover} wrap="truncate-end">
-            {item.label}
-          </Text>
-        </Box>
+        {hasNames ? (
+          <Box height={NAME_ROWS} justifyContent="center">
+            <Text size="footnote" weight={isActive ? 'semibold' : 'medium'} dimColor={!isActive && item.id !== hover} wrap="truncate-end">
+              {item.label}
+            </Text>
+          </Box>
+        ) : null}
       </Box>
     )
   })
 
   const light = current.light
-  const shown = current.pills.find(p => p.id === hover)
+  // Without names under the tiles, the active mode is named on the info line.
+  const shown = current.pills.find(p => p.id === hover) ?? (hasNames || hover === LIGHT ? undefined : current.pills.find(p => p.id === current.active))
   const info = shown ? (
     <Text size="footnote" wrap="truncate-end">
       <Text weight="semibold" color={shown.color}>
@@ -103,7 +107,7 @@ const Tiles: ClientModule<PillsProps, Local> = (props, surface) => {
         {info}
       </Box>
       <Box height={TILES_Y - INFO_ROWS} />
-      <Box flexDirection="row" height={TILE_ROWS + NAME_ROWS} marginLeft={left}>
+      <Box flexDirection="row" height={tileRows + (hasNames ? NAME_ROWS : 0)} marginLeft={left}>
         {tiles}
       </Box>
     </Box>

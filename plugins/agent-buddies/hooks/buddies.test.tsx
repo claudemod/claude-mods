@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 const PANE = {
@@ -170,7 +170,7 @@ test('a click on the card opens the whole run: task, phases, timings and result'
   expect(detail).toContain('12,2k Tokens')
   // The steps in phases of one kind of work, in order.
   const flow = detail.slice(detail.indexOf('ABLAUF'))
-  const order = ['Suchen', 'Lesen', '2 Dateien', 'Ändern', 'Ausführen', 'npm test'].map(word => flow.indexOf(word))
+  const order = ['Erkunden', '2 Dateien · 1 Suche', 'Ändern', 'Ausführen', 'npm test'].map(word => flow.indexOf(word))
   expect(order.every(at => at >= 0)).toBe(true)
   expect([...order].sort((a, b) => a - b)).toEqual(order)
   expect(detail).toContain('+0:00')
@@ -277,5 +277,66 @@ test('mit dem Craft-Skin ist die Karte ein Item-Tooltip mit Klotz-Figur und Pixe
   // The figure with its skin tone, then the name as a picture, not as text.
   expect(drawn.some(source => source.includes('#E9B98F'))).toBe(true)
   expect(drawn.length).toBeGreaterThanOrEqual(3)
+  await ui.unmount()
+})
+
+test('a long run with many phases stays under the 100,000 characters a drawing may hold', async ($, on) => {
+  engine(on)
+  let skin = false
+  on('state.get', (_, e, next) => (e.plugin === 'xp-bar' && e.key === 'craftSkin' ? { value: { value: skin, version: 1 } } : next(e)))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await spawn($, 'Large refactor')
+  const tools = [
+    { tool: 'Read', file_path: '/x/src/a-very-long-folder-name/with/some/deeply/nested/component-file.tsx' },
+    { tool: 'Grep', pattern: 'someFunctionNameThatIsLong', path: '/x/src' },
+    { tool: 'Edit', file_path: '/x/src/file.tsx', old_string: 'line one\nline two\nline three', new_string: 'line four\nline five' },
+    { tool: 'Bash', command: 'npm run test -- --reporter=verbose --coverage' },
+  ]
+  for (let i = 0; i < 70; i++) await $.tool.call({ ...tools[i % tools.length], agentId: 'a1' } as never)
+  for (const isCraft of [false, true]) {
+    skin = isCraft
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    await ui.pointer({ type: 'down', x: 2, y: 0, button: 'left', in: 'a1' })
+    await ui.pointer({ type: 'up', x: 2, y: 0, button: 'left', in: 'a1' })
+    const tree = await ui.drawn({ in: 'detail' })
+    expect(JSON.stringify(tree).length).toBeLessThan(100_000)
+    // The latest phase is still there to read: the 70th call was a search.
+    expect(words(tree).join(' ')).toContain('someFunctionNameThatIsLong')
+    await ui.pointer({ type: 'down', x: 1, y: 0, button: 'left', in: 'detail' })
+    await ui.pointer({ type: 'up', x: 1, y: 0, button: 'left', in: 'detail' })
+    await ui.unmount()
+  }
+})
+
+test('an agent with a to-do list shows its exact progress', { options: { language: 'de' } }, async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await spawn($, 'Mit Liste')
+  const todos = (done: number) =>
+    ['a', 'b', 'c', 'd'].map((content, i) => ({ content, activeForm: content, status: i < done ? 'completed' : i === done ? 'in_progress' : 'pending' }))
+  await $.tool.call({ tool: 'TodoWrite', todos: todos(2), agentId: 'a1' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // 2 done and one under way of 4: 63 %, and no tilde, as the agent said so itself.
+  expect(words(await ui.drawn({ in: 'a1' })).join(' ')).toContain('Läuft · 63 %')
+  await ui.pointer({ type: 'down', x: 2, y: 0, button: 'left', in: 'a1' })
+  await ui.pointer({ type: 'up', x: 2, y: 0, button: 'left', in: 'a1' })
+  expect(words(await ui.drawn({ in: 'detail' })).join(' ')).toContain('2 von 4 Aufgaben')
+  await ui.unmount()
+})
+
+test('without a list the progress is estimated from earlier agents of the type', { options: { language: 'de' } }, async ($, on) => {
+  engine(on)
+  mock.store(on, { 'history-1': { 'general-purpose': [10, 10, 12] } })
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await spawn($, 'Schätzen')
+  for (let i = 0; i < 5; i++) await $.tool.call({ tool: 'Read', file_path: `/x/${i}.ts`, agentId: 'a1' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(words(await ui.drawn({ in: 'a1' })).join(' ')).toContain('Läuft · ~50 %')
+  // Once done, it counts for the next agent of its type: four earlier ones now.
+  await $.turn.complete({ turnId: 't1', answer: 'ok', durationMs: 9, isAborted: false, reason: 'answer', agentId: 'a1' } as never)
+  await spawn($, 'Nächster')
+  await ui.pointer({ type: 'down', x: 2, y: 0, button: 'left', in: 'a2' })
+  await ui.pointer({ type: 'up', x: 2, y: 0, button: 'left', in: 'a2' })
+  expect(words(await ui.drawn({ in: 'detail' })).join(' ')).toContain('geschätzt nach 4 früheren Agenten')
   await ui.unmount()
 })

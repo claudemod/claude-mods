@@ -21,6 +21,48 @@ const agents = atom({ plugin: 'agent-buddies', key: 'agents' } as const, [], { s
 const open = atom({ plugin: 'agent-buddies', key: 'open' } as const, [])
 const expanded = atom({ plugin: 'agent-buddies', key: 'expanded' } as const, [])
 const focus = atom({ plugin: 'agent-buddies', key: 'focus' } as const, '')
+const chosenPhases = atom({ plugin: 'agent-buddies', key: 'phases' } as const, [])
+
+// How many steps the last finished agents of each type took, kept across
+// sessions: what a running agent's progress is measured against.
+const HISTORY = 'history-1'
+const KEPT_HISTORY = 20
+type History = Record<string, number[]>
+
+async function historyOf($: EngineInterface): Promise<History> {
+  const stored = await $.store.get(HISTORY).catch(() => undefined)
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {}
+  const out: History = {}
+  for (const [type, list] of Object.entries(stored as Record<string, unknown>)) {
+    if (Array.isArray(list)) out[type] = list.filter((n): n is number => typeof n === 'number' && n > 0)
+  }
+  return out
+}
+
+function median(list: readonly number[]) {
+  const sorted = [...list].sort((a, b) => a - b)
+  return sorted[Math.floor(sorted.length / 2)] ?? 0
+}
+
+// What a to-do tool call says about how far its agent is.
+function todosAfter(tool: string, input: Record<string, unknown>, before: Agent['todos']): Agent['todos'] {
+  if (tool === 'TodoWrite' && Array.isArray(input.todos)) {
+    const todos = input.todos as { status?: string }[]
+    return {
+      done: todos.filter(t => t.status === 'completed').length,
+      active: todos.filter(t => t.status === 'in_progress').length,
+      total: todos.length,
+    }
+  }
+  const now = before ?? { done: 0, active: 0, total: 0 }
+  if (tool === 'TaskCreate') return { ...now, total: now.total + 1 }
+  if (tool === 'TaskUpdate') {
+    if (input.status === 'completed') return { ...now, done: Math.min(now.total, now.done + 1), active: Math.max(0, now.active - 1) }
+    if (input.status === 'in_progress') return { ...now, active: now.active + 1 }
+    if (input.status === 'deleted') return { ...now, total: Math.max(0, now.total - 1) }
+  }
+  return before
+}
 const language = atom({ plugin: 'agent-buddies', key: 'language' } as const, 'en')
 // The Craft Skin is the XP bar's to set; without that mod it is simply off.
 const craftSkin = atom({ plugin: 'xp-bar', key: 'craftSkin' } as const, false)
@@ -84,7 +126,12 @@ async function showPane($: EngineInterface) {
 async function addAgent($: EngineInterface, spawned: Spawned) {
   const isFresh = isNewRound
   isNewRound = false
-  await update($, agents, list => welcome(list, spawned, Date.now(), isFresh))
+  const past = (await historyOf($))[spawned.type ?? ''] ?? []
+  await update($, agents, list =>
+    welcome(list, spawned, Date.now(), isFresh).map(agent =>
+      agent.id === spawned.id && agent.samples === undefined ? { ...agent, expected: median(past), samples: past.length } : agent,
+    ),
+  )
   await showPane($)
 }
 
@@ -158,6 +205,7 @@ export const register: Register = (on, options) => {
               state: 'running' as const,
               endedAt: undefined,
               total: agent.total + 1,
+              todos: todosAfter(e.tool, input, agent.todos),
               counts: { ...agent.counts, [e.tool]: (agent.counts[e.tool] ?? 0) + 1 },
               steps: [...agent.steps, step].slice(-KEPT_STEPS),
             }
@@ -213,6 +261,14 @@ export const register: Register = (on, options) => {
           : agent,
       ),
     )
+    // A finished agent teaches the estimate how many steps its type takes.
+    const finished = (await read($, agents)).find(agent => agent.id === e.agentId)
+    if (state === 'done' && finished && finished.total > 0) {
+      const history = await historyOf($)
+      const type = finished.type
+      history[type] = [...(history[type] ?? []), finished.total].slice(-KEPT_HISTORY)
+      await $.store.set(HISTORY, history).catch(() => undefined)
+    }
     return result
   })
 
@@ -221,6 +277,10 @@ export const register: Register = (on, options) => {
     const message = e.data as CardMessage
     if (message.kind === 'step') await update($, open, list => toggled(list, message.id))
     if (message.kind === 'toggle') await update($, expanded, list => toggled(list, message.id))
+    if (message.kind === 'phase') {
+      const mark = `${message.open ? '+' : '-'}${message.id}`
+      await update($, chosenPhases, list => [...list.filter(one => one.slice(1) !== message.id), mark].slice(-200))
+    }
     if (message.kind === 'agent') await update($, focus, () => message.id)
     if (message.kind === 'back') await update($, focus, () => '')
     return {}
@@ -265,8 +325,9 @@ export const register: Register = (on, options) => {
     const focused = list.findIndex(agent => agent.id === focusId)
     if (focused >= 0) {
       const expandedIds = await read($, expanded)
+      const chosen = await read($, chosenPhases)
       const agent = list[focused] as Agent
-      const props = detailOf(agent, list, focused, lang, Math.max(28, e.props.bodyColumns - (isCraftSkin ? 3 : 1)), hasPictures, openIds, expandedIds, isCraftSkin, now)
+      const props = detailOf(agent, list, focused, lang, Math.max(28, e.props.bodyColumns - (isCraftSkin ? 3 : 1)), hasPictures, openIds, expandedIds, chosen, isCraftSkin, now)
       const view = <Client key="detail" module="./detail.tsx" props={props} width="100%" />
       return isCraftSkin ? (
         <Box borderStyle="single" borderColor={CRAFT_EDGE} backgroundColor={CRAFT_GROUND}>

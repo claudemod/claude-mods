@@ -43,8 +43,22 @@ export type PillsProps = {
   light: { source: string; alt: string; amount: string; isRunning: boolean; lines: string[] }
 }
 
+// What the hotbar is drawn from, with the Craft Skin on.
+export type HotbarProps = {
+  pills: { id: string; label: string; hint: string }[]
+  active: string
+  // The slot apart: the colour of the task's cost, its number and its figures.
+  lamp: { color: string; alt: string; amount: string; isRunning: boolean; lines: string[] }
+  // Game pixels to screen pixels: 2 where the band has room, less in a narrow window.
+  scale: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
+    // Chosen in the XP bar's options; read here, written only there.
+    'xp-bar': {
+      craftSkin: boolean
+    }
     'mode-bar': {
       mode: string
       modes: Mode[]

@@ -103,6 +103,22 @@ function fold(id: string, text: string, width: number, shown: number, expanded: 
   return { id, lines: lines.slice(0, shown), isOpen, more: words.more(lines.length - shown) }
 }
 
+// How far a running agent is, 0..1, and how that was found. Its own to-do
+// list says it best; else the steps that agents of its type took before;
+// else a curve that rises quickly and never claims to be done.
+export function progressOf(agent: Agent, lang: Lang): { value: number; isExact: boolean; basis: string } {
+  const words = wordsFor(lang)
+  if (agent.state !== 'running') return { value: 1, isExact: true, basis: '' }
+  const todos = agent.todos
+  if (todos && todos.total > 0) {
+    return { value: Math.min(0.99, (todos.done + todos.active * 0.5) / todos.total), isExact: true, basis: words.todos(todos.done, todos.total) }
+  }
+  if (agent.expected && agent.expected > 0 && (agent.samples ?? 0) >= 2) {
+    return { value: Math.max(0.02, Math.min(0.95, agent.total / agent.expected)), isExact: false, basis: words.history(agent.samples ?? 0) }
+  }
+  return { value: Math.max(0.02, 0.9 * (1 - Math.exp(-agent.total / 14))), isExact: false, basis: words.rough }
+}
+
 const durationOf = (step: Step, now: number) => (step.endedAt ?? now) - step.startedAt
 
 export function stripOf(steps: readonly Step[], now: number): Segment[] {
@@ -113,7 +129,9 @@ export function stripOf(steps: readonly Step[], now: number): Segment[] {
 function statusOf(agent: Agent, lang: Lang) {
   const words = wordsFor(lang)
   const seconds = Math.max(1, Math.round(((agent.endedAt ?? agent.startedAt) - agent.startedAt) / 1000))
-  return agent.state === 'running' ? words.running : agent.state === 'done' ? words.done(seconds) : agent.state === 'stopped' ? words.stopped : words.failed
+  const progress = progressOf(agent, lang)
+  const percent = words.percent(Math.round(progress.value * 100), progress.isExact)
+  return agent.state === 'running' ? `${words.running} · ${percent}` : agent.state === 'done' ? words.done(seconds) : agent.state === 'stopped' ? words.stopped : words.failed
 }
 
 export function cardOf(
@@ -144,6 +162,7 @@ export function cardOf(
     hasPictures,
     isCraftSkin,
     strip: stripOf(agent.steps, now),
+    progress: progressOf(agent, lang).value,
     rows: steps.map(step => {
       const isOpen = openIds.includes(step.id) && step.detail.length > 0
       return { id: step.id, name: step.name, arg: step.arg, state: step.state, isOpen, detail: isOpen ? step.detail : [] }
@@ -151,19 +170,26 @@ export function cardOf(
   }
 }
 
-export function phasesOf(agent: Agent, lang: Lang, openIds: readonly string[], expanded: readonly string[], now: number): Phase[] {
+// `chosen` holds "+id" for a phase the person opened and "-id" for one they closed.
+export function phasesOf(agent: Agent, lang: Lang, openIds: readonly string[], chosen: readonly string[], now: number): Phase[] {
   const words = wordsFor(lang)
+  // Reading and searching take turns while an agent finds its way: one phase.
+  const groupOf = (kind: Kind) => (kind === 'read' || kind === 'search' ? 'explore' : kind)
   const runs: Step[][] = []
   for (const step of agent.steps) {
     const last = runs[runs.length - 1]
-    if (last && last[0]?.kind === step.kind) last.push(step)
+    if (last && last[0] && groupOf(last[0].kind) === groupOf(step.kind)) last.push(step)
     else runs.push([step])
   }
   const isSmall = agent.steps.length <= SMALL_RUN
   return runs.map((run, i) => {
     const first = run[0] as Step
     const last = run[run.length - 1] as Step
-    const kind = first.kind
+    const tally = new Map<Kind, number>()
+    for (const step of run) tally.set(step.kind, (tally.get(step.kind) ?? 0) + 1)
+    // Its colour and icon are the kind it did most.
+    const kind = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? first.kind
+    const isMixed = tally.size > 1
     const id = `phase:${first.id}`
     const isLatest = i === runs.length - 1
     const byDefault = isSmall || isLatest || run.length <= 3
@@ -185,11 +211,14 @@ export function phasesOf(agent: Agent, lang: Lang, openIds: readonly string[], e
     return {
       id,
       kind,
-      label: words.kinds[kind],
-      summary: words.phase(kind, run.length),
+      label: isMixed ? words.explore : words.kinds[kind],
+      summary: KIND_ORDER.filter(k => tally.has(k))
+        .map(k => words.phase(k, tally.get(k) ?? 0))
+        .join(' · '),
       errors: errors > 0 ? words.errors(errors) : '',
       took: took((last.endedAt ?? now) - first.startedAt, lang),
-      isOpen: expanded.includes(id) ? !byDefault : byDefault,
+      isOpen: chosen.includes(`+${id}`) ? true : chosen.includes(`-${id}`) ? false : byDefault,
+      isPinned: chosen.includes(`+${id}`),
       rows,
     }
   })
@@ -204,6 +233,7 @@ export function detailOf(
   hasPictures: boolean,
   openIds: readonly string[],
   expanded: readonly string[],
+  chosen: readonly string[],
   isCraftSkin: boolean,
   now: number,
 ): DetailProps {
@@ -233,10 +263,12 @@ export function detailOf(
     startedAt: agent.startedAt,
     tabs: all.map(one => ({ id: one.id, name: one.name, color: one.color, state: one.state })),
     strip: stripOf(agent.steps, now),
+    progress: progressOf(agent, lang).value,
+    basis: progressOf(agent, lang).basis,
     legend: KIND_ORDER.filter(kind => (counts.get(kind) ?? 0) > 0).map(kind => ({ kind, label: words.kinds[kind], count: counts.get(kind) ?? 0 })),
-    words: { back: words.back, task: words.task, flow: words.flow, result: words.result, waiting: words.waiting, noSteps: words.noSteps },
+    words: { back: words.back, task: words.task, flow: words.flow, result: words.result, waiting: words.waiting, noSteps: words.noSteps, earlier: words.earlier },
     task: fold(`task:${agent.id}`, agent.prompt || agent.name, textWidth, TASK_LINES, expanded, lang),
-    phases: phasesOf(agent, lang, openIds, expanded, now),
+    phases: phasesOf(agent, lang, openIds, chosen, now),
     result: agent.answer ? fold(`result:${agent.id}`, agent.answer, textWidth, RESULT_LINES, expanded, lang) : null,
   }
 }

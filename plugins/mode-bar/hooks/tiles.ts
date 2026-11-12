@@ -16,8 +16,22 @@ export const GLYPHS: Record<string, string> = {
   deep: "<path d='M12 3.5v17M3.5 12h17M6 6l12 12M18 6L6 18'/>",
 }
 
+// Each tile's picture depends only on these few values: worked out once,
+// so a redraw (a hover, a new figure on the light) costs nothing here.
+const drawnTiles = new Map<string, string>()
+const drawnShapes = new Map<string, string>()
+
 // An Apple-style rounded square (a superellipse) of side `s`.
 function squircle(s: number, inset = 0) {
+  const key = `${s}:${inset}`
+  const known = drawnShapes.get(key)
+  if (known !== undefined) return known
+  const shape = squircleOf(s, inset)
+  drawnShapes.set(key, shape)
+  return shape
+}
+
+function squircleOf(s: number, inset: number) {
   const n = 5
   const a = s / 2 - inset
   const c = s / 2
@@ -47,8 +61,18 @@ function escape(text: string) {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-export function tileSvg(id: string, label: string, color: string, state: 'active' | 'hover' | 'rest') {
-  const s = TILE_PX
+export function tileSvg(id: string, label: string, color: string, state: 'active' | 'hover' | 'rest', size: number = TILE_PX) {
+  const key = `${id}\u0000${label}\u0000${color}\u0000${state}\u0000${size}`
+  const known = drawnTiles.get(key)
+  if (known !== undefined) return known
+  const tile = tileSvgOf(id, label, color, state, size)
+  if (drawnTiles.size > 200) drawnTiles.clear()
+  drawnTiles.set(key, tile)
+  return tile
+}
+
+function tileSvgOf(id: string, label: string, color: string, state: 'active' | 'hover' | 'rest', size: number) {
+  const s = size
   const gid = `g${id.replace(/[^a-z0-9]/gi, '')}`
   const glyph =
     GLYPHS[id] ??
@@ -56,7 +80,8 @@ export function tileSvg(id: string, label: string, color: string, state: 'active
   const opacity = state === 'rest' ? 0.8 : 1
   // The active tile stands in a thin ring of its own colour.
   const ring = state === 'active' ? `<path d='${squircle(s, 0.6)}' fill='none' stroke='${color}' stroke-width='1.2'/>` : ''
-  const inner = state === 'active' ? 2.6 : 0.5
+  // The ring's room grows with the tile: 2.6 of 28 pixels.
+  const inner = state === 'active' ? Math.max(1.4, s * 0.093) : 0.5
   const scale = ((s - inner * 2) * 0.68) / 24
   const offset = s / 2 - 12 * scale
   return (

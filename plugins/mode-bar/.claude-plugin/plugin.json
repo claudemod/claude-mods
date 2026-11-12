@@ -1,6 +1,6 @@
 {
   "name": "mode-bar",
-  "version": "0.6.0",
+  "version": "0.7.2",
   "description": "Ten one-click modes above the chat that make Claude cheaper, faster or more careful, plus a traffic light for how heavy the current task is",
   "types": "./types/index.d.ts",
   "userConfig": {

@@ -56,7 +56,7 @@ const Card: ClientModule<CardProps, true> = (props, surface) => {
   const columns = Math.max(20, props.columns)
   const mascotCols = props.isCraftSkin ? CRAFT_MASCOT_COLS : MASCOT_COLS
   const textCols = columns - mascotCols - SIDE_COLS
-  const statusCols = props.isCraftSkin ? Math.min(16, Math.ceil((textWidth(props.status) * SMALL) / CELL_PX) + 2) : Math.min(14, props.status.length + 2)
+  const statusCols = props.isCraftSkin ? Math.min(16, Math.ceil((textWidth(props.status) * SMALL) / CELL_PX) + 2) : Math.min(17, props.status.length + 2)
   const nameCols = textCols - statusCols
 
   const plainName = (
@@ -80,11 +80,11 @@ const Card: ClientModule<CardProps, true> = (props, surface) => {
   const subtitle = isCraft ? pixelLabel(props.subtitle, textCols - CHEVRON_COLS, SMALL, CRAFT_MUTED, plainSubtitle) : plainSubtitle
   const stripCols = textCols - CHEVRON_COLS
   const strip = picture(
-    stripSvg(props.strip, stripCols * CELL_PX, 8, isCraft),
+    stripSvg(props.strip, stripCols * CELL_PX, 8, isCraft, props.progress),
     `${props.strip.length}`,
     Math.round(stripCols * CELL_PX),
     8,
-    stripText(props.strip, stripCols, isCraft, Text as unknown as (p: object) => RenderElement),
+    stripText(props.strip, stripCols, isCraft, Text as unknown as (p: object) => RenderElement, props.progress),
   )
 
   const header = (

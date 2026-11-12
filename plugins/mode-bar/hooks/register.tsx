@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Lang, Mode, PillsProps, Task } from '../types'
+import type { HotbarProps, Lang, Mode, PillsProps, Task } from '../types'
+import { HOTBAR_SCALE, HOTBAR_W } from './hotbar-art'
 import { languageOf, short, wordsFor } from './i18n'
 import { LEVEL_COLOR, levelOf, lightSvg, weigh } from './light'
 import { NORMAL, parseMode, startMode } from './modes'
@@ -12,6 +13,8 @@ const mode = atom({ plugin: 'mode-bar', key: 'mode' } as const, NORMAL)
 const modes = atom({ plugin: 'mode-bar', key: 'modes' } as const, [])
 const task = atom({ plugin: 'mode-bar', key: 'task' } as const, null)
 const language = atom({ plugin: 'mode-bar', key: 'language' } as const, 'en')
+// The Craft Skin is the XP bar's to set; without that mod it is simply off.
+const craftSkin = atom({ plugin: 'xp-bar', key: 'craftSkin' } as const, false)
 
 // The band's grey box is hidden under a ground in the chat's own colour, as the
 // XP bar does it: an absolute box reaching past the band's padding (whole
@@ -22,6 +25,7 @@ const BLEND_DOWN = 3
 
 // The pill field's key; it posts `{ kind: 'pick', id }` when a pill is clicked.
 const PILLS = 'mode-pills'
+const HOTBAR = 'mode-hotbar'
 
 const HOTKEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0']
 
@@ -156,7 +160,7 @@ export const register: Register = (on, options) => {
 
   // A click on a pill: that mode, with the same toast as a button.
   on('ui.message', async ($, e, next) => {
-    if (e.element !== PILLS) return next(e)
+    if (e.element !== PILLS && e.element !== HOTBAR) return next(e)
     const data = e.data as { kind?: string; id?: string } | null
     const m = (await read($, modes)).find(x => x.id === data?.id)
     if (data?.kind === 'pick' && m) {
@@ -333,6 +337,17 @@ export const register: Register = (on, options) => {
       columns: fieldWidth,
       light: { source: lightSvg(level, isRunning), alt: lines.join(' · '), amount, isRunning, lines },
     }
+    // The hotbar is 240 game pixels wide, drawn twice that where the band has
+    // room; a narrower window gets it smaller, in quarter steps, never under 1.
+    const roomPx = fieldWidth * 7.5
+    const hotbarScale = Math.max(1, Math.min(HOTBAR_SCALE, Math.floor((roomPx / HOTBAR_W) * 4) / 4))
+    const hotbar: HotbarProps = {
+      scale: hotbarScale,
+      pills: list.map(({ id, label, hint }) => ({ id, label, hint })),
+      active,
+      lamp: { color: LEVEL_COLOR[level], alt: lines.join(' · '), amount: t ? amount : '', isRunning, lines },
+    }
+    const isCraftSkin = await read($, craftSkin)
     return (
       <Box flexDirection="column" alignItems="center">
         <Box
@@ -344,13 +359,18 @@ export const register: Register = (on, options) => {
           backgroundColor={BLEND_GROUND}
         />
         {below}
-        {/* A line's room between what is above (the XP bar) and the tiles. */}
-        <Box position="relative" flexDirection="row" marginTop={2}>
+        {/* A line's room between what is above (the XP bar) and the tiles; the
+            hotbar stands right under the bar, as in the game. */}
+        <Box position="relative" flexDirection="row" marginTop={isCraftSkin ? 0 : 2}>
           {/* The desktop makes a Box relative only when it holds an absolute Box
               of its own: this empty one lifts the row above the chat-coloured
               ground, which would otherwise be painted over the tiles. */}
           <Box position="absolute" top={0} left={0} />
-          <Client key={PILLS} module="./pills.tsx" props={pills} width={fieldWidth} />
+          {isCraftSkin ? (
+            <Client key={HOTBAR} module="./hotbar.tsx" props={hotbar} />
+          ) : (
+            <Client key={PILLS} module="./pills.tsx" props={pills} width={fieldWidth} />
+          )}
         </Box>
       </Box>
     )

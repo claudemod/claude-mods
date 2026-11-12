@@ -30,6 +30,12 @@ export function wordsFor(lang: Lang) {
         result: 'ERGEBNIS',
         waiting: 'Arbeitet noch …',
         noSteps: 'Noch keine Schritte.',
+        earlier: '… {n} frühere Schritte',
+        percent: (n: number, isExact: boolean) => `${isExact ? '' : '~'}${n} %`,
+        todos: (done: number, total: number) => `${done} von ${total} Aufgaben`,
+        history: (n: number) => `geschätzt nach ${n} früheren Agenten`,
+        rough: 'grob geschätzt',
+        explore: 'Erkunden',
         kinds: { read: 'Lesen', search: 'Suchen', edit: 'Ändern', run: 'Ausführen', web: 'Web', tool: 'Tools' } as Record<Kind, string>,
         phase: (kind: Kind, n: number) =>
           kind === 'read'
@@ -66,6 +72,12 @@ export function wordsFor(lang: Lang) {
         result: 'RESULT',
         waiting: 'Still working …',
         noSteps: 'No steps yet.',
+        earlier: '… {n} earlier steps',
+        percent: (n: number, isExact: boolean) => `${isExact ? '' : '~'}${n}%`,
+        todos: (done: number, total: number) => `${done} of ${total} tasks`,
+        history: (n: number) => `estimated from ${n} earlier agents`,
+        rough: 'rough estimate',
+        explore: 'Exploring',
         kinds: { read: 'Reading', search: 'Searching', edit: 'Editing', run: 'Running', web: 'Web', tool: 'Tools' } as Record<Kind, string>,
         phase: (kind: Kind, n: number) =>
           kind === 'read'

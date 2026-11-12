@@ -79,7 +79,7 @@ export function setTargets(key: string, targets: Target[]) {
 }
 
 // The strip as text, where no pictures are drawn: a bar of cells in the kinds' colours.
-export function stripText(segments: readonly Segment[], cols: number, isCraft: boolean, Text: (p: object) => RenderElement) {
+export function stripText(segments: readonly Segment[], cols: number, isCraft: boolean, Text: (p: object) => RenderElement, progress = 1) {
   const ink = isCraft ? CRAFT_KIND_INK : KIND_INK
   if (segments.length === 0) return Text({ dimColor: true, children: '─'.repeat(cols) })
   const total = segments.reduce((sum, s) => sum + s.weight, 0)
@@ -90,12 +90,14 @@ export function stripText(segments: readonly Segment[], cols: number, isCraft: b
     if (last && last.color === ink[s.kind]) last.weight += s.weight
     else runs.push({ color: ink[s.kind], weight: s.weight })
   }
+  const reach = Math.max(runs.length, Math.round(cols * Math.min(1, Math.max(0, progress))))
   let used = 0
   const parts = runs.map((run, i) => {
-    const n = i === runs.length - 1 ? Math.max(1, cols - used) : Math.max(1, Math.round((run.weight / total) * cols))
+    const n = i === runs.length - 1 ? Math.max(1, reach - used) : Math.max(1, Math.round((run.weight / total) * reach))
     used += n
     return Text({ color: run.color, children: '━'.repeat(Math.max(0, n)) })
   })
+  if (cols - used > 0) parts.push(Text({ dimColor: true, children: '─'.repeat(cols - used) }))
   return Text({ wrap: 'truncate-end', children: parts })
 }
 
