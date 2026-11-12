@@ -1,6 +1,6 @@
 {
   "name": "agent-buddies",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Every agent Claude sends out gets its own little blocky buddy in its own colour, with a live, clickable list of what it is doing",
   "types": "./types/index.d.ts",
   "userConfig": {

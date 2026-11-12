@@ -120,7 +120,7 @@ test('a click on a step opens it, a second click closes it', { options: { langua
   await ui.unmount()
 })
 
-test('only the latest three steps show until the card is opened', { options: { language: 'en' } }, async ($, on) => {
+test('only the latest three steps show on the card', { options: { language: 'en' } }, async ($, on) => {
   engine(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await spawn($, 'Explore')
@@ -131,10 +131,90 @@ test('only the latest three steps show until the card is opened', { options: { l
   const before = words(await ui.drawn({ in: 'a1' })).join(' ')
   expect(before).not.toContain('one.ts')
   expect(before).toContain('five.ts')
+  await ui.unmount()
+})
 
-  await ui.pointer({ type: 'down', x: 2, y: 0, button: 'left', in: 'a1' })
-  await ui.pointer({ type: 'up', x: 2, y: 0, button: 'left', in: 'a1' })
-  expect(words(await ui.drawn({ in: 'a1' })).join(' ')).toContain('one.ts')
+const click = async (ui: { pointer: (p: never) => Promise<unknown> }, inKey: string, y: number, x = 2) => {
+  await ui.pointer({ type: 'down', x, y, button: 'left', in: inKey } as never)
+  await ui.pointer({ type: 'up', x, y, button: 'left', in: inKey } as never)
+}
+
+test('a click on the card opens the whole run: task, phases, timings and result', { options: { language: 'de' } }, async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await $.agent.spawn({ prompt: 'Finde heraus, wo das Datum formatiert wird, und mach es einheitlich.', description: 'Datum vereinheitlichen', subagentType: 'Explore' } as never)
+  await spawn($, 'Zweiter')
+  await $.tool.call({ tool: 'Grep', pattern: 'formatDate', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/x/src/date.ts', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/x/src/page.tsx', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Edit', file_path: '/x/src/page.tsx', old_string: 'alt', new_string: 'neu', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'npm test', agentId: 'a1' } as never)
+  await $.turn.complete({
+    turnId: 't1',
+    answer: '## Ergebnis\n\nDas Datum wird jetzt **überall** mit formatDate formatiert.',
+    durationMs: 900,
+    isAborted: false,
+    reason: 'answer',
+    agentId: 'a1',
+    usage: { input_tokens: 1000, output_tokens: 200, cache_creation_input_tokens: 0, cache_read_input_tokens: 11_000, model: 'claude-haiku-5-5' },
+  } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await click(ui, 'a1', 0)
+  const detail = words(await ui.drawn({ in: 'detail' })).join(' ')
+  // The task, what kind of agent it is and what it cost.
+  expect(detail).toContain('AUFTRAG')
+  expect(detail).toContain('Finde heraus, wo das Datum formatiert wird')
+  expect(detail).toContain('Explore')
+  expect(detail).toContain('Haiku 5.5')
+  expect(detail).toContain('12,2k Tokens')
+  // The steps in phases of one kind of work, in order.
+  const flow = detail.slice(detail.indexOf('ABLAUF'))
+  const order = ['Suchen', 'Lesen', '2 Dateien', 'Ändern', 'Ausführen', 'npm test'].map(word => flow.indexOf(word))
+  expect(order.every(at => at >= 0)).toBe(true)
+  expect([...order].sort((a, b) => a - b)).toEqual(order)
+  expect(detail).toContain('+0:00')
+  // What it answered, as plain text.
+  expect(detail).toContain('ERGEBNIS')
+  expect(detail).toContain('Das Datum wird jetzt überall mit formatDate formatiert.')
+  expect(detail).not.toContain('**')
+  // The other agent is a tab away.
+  expect(detail).toContain('Zweiter')
+
+  // Back to the list.
+  await click(ui, 'detail', 0, 1)
+  expect(words(await ui.drawn({ in: 'a1' })).join(' ')).toContain('Datum vereinheitlichen')
+  await ui.unmount()
+})
+
+test('in the detail view a phase folds and a step opens its diff', { options: { language: 'en' } }, async ($, on) => {
+  engine(on)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await spawn($, 'Build')
+  await $.tool.call({ tool: 'Edit', file_path: '/x/page.tsx', old_string: 'old line', new_string: 'new line', agentId: 'a1' } as never)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await click(ui, 'a1', 0)
+
+  const find = async (word: string) => {
+    const tree = await ui.drawn({ in: 'detail' })
+    // The root column's children in order, each as tall as its height says.
+    let y = 0
+    for (const child of (tree as { children?: { props?: { height?: number } }[] }).children ?? []) {
+      if (words(child).join(' ').includes(word)) return y
+      y += child.props?.height ?? 1
+    }
+    return -1
+  }
+  const stepY = await find('page.tsx')
+  expect(stepY).toBeGreaterThan(0)
+  await click(ui, 'detail', stepY, 20)
+  const opened = words(await ui.drawn({ in: 'detail' })).join(' ')
+  expect(opened).toContain('- old line')
+  expect(opened).toContain('+ new line')
+
+  const phaseY = await find('1 edit')
+  await click(ui, 'detail', phaseY, 20)
+  expect(words(await ui.drawn({ in: 'detail' })).join(' ')).not.toContain('page.tsx')
   await ui.unmount()
 })
 
@@ -182,4 +262,20 @@ test('without agents the pane says so, on every surface', { options: { language:
     expect((await ui.find({ type: 'Text' }))?.text).toContain('Noch keine Agenten')
     await ui.unmount()
   }
+})
+
+test('mit dem Craft-Skin ist die Karte ein Item-Tooltip mit Klotz-Figur und Pixel-Namen', async ($, on) => {
+  engine(on)
+  on('state.get', (_, e, next) => (e.plugin === 'xp-bar' && e.key === 'craftSkin' ? { value: { value: true, version: 1 } } : next(e)))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await spawn($, 'Suche')
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+
+  const boxes = await ui.findAll({ type: 'Box' })
+  expect(boxes.find(box => box.props.backgroundColor === '#100010')?.props).toMatchObject({ borderStyle: 'single', borderColor: '#5000FF' })
+  const drawn = pictures(await ui.drawn({ in: 'a1' }))
+  // The figure with its skin tone, then the name as a picture, not as text.
+  expect(drawn.some(source => source.includes('#E9B98F'))).toBe(true)
+  expect(drawn.length).toBeGreaterThanOrEqual(3)
+  await ui.unmount()
 })

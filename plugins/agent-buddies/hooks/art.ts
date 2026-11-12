@@ -1,4 +1,5 @@
-import type { AgentState, Held, StepState } from '../types'
+import type { AgentState, Held, Kind, Segment, StepState } from '../types'
+import { textPath, textWidth } from './pixel'
 
 // The buddy: an original blocky little figure drawn on a pixel grid, one per
 // agent in that agent's colour. It walks and blinks by itself (SMIL in the
@@ -153,4 +154,229 @@ export function stepIconSvg(state: StepState, color: string) {
 export function chevronSvg(isOpen: boolean) {
   const path = isOpen ? 'M2.5 4.5L6 8l3.5-3.5' : 'M4.5 2.5L8 6l-3.5 3.5'
   return `<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='${path}' fill='none' stroke='#8a8a85' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>`
+}
+
+// --- The Craft Skin: a blocky figure in a dark slot, with tools to match.
+
+export const CRAFT_W = 28
+export const CRAFT_H = 20
+export const CRAFT_PX = 3
+
+// 9 × 9 pixels each, the bottom-left corner in the figure's hand.
+const CRAFT_ITEMS: Record<Held | 'emerald', Item> = {
+  terminal: { rows: ['..ddddd..', '.d...hhd.', '.....hh.d', '....hh..d', '...hh....', '..hh.....', '.hh......', 'hh.......', 'h........'], ink: { d: '#7FE3DC', h: '#8A6A48' } },
+  pencil: { rows: ['.......ww', '.....wwww', '....wwwg.', '...wwwg..', '..wwwg...', '..wwg....', '.kg......', 'k........', '.........'], ink: { w: '#F1EEE6', g: '#B9B5AA', k: '#3A3226' } },
+  book: { rows: ['.bbbbbbb.', 'bbrrrrrbw', 'bbryyrrbw', 'bbrrrrrbw', 'bbrrrrrbw', 'bbrrrrrbw', 'bbbbbbbbw', '.wwwwwww.', '.........'], ink: { b: '#6B4426', r: '#9A3530', y: '#E8C65A', w: '#E9E4D6' } },
+  lens: { rows: ['..ggggg..', '.gwwwwwg.', 'gwwwrwwwg', 'gwwwrwwwg', 'gwwwkwwwg', 'gwwwkwwwg', 'gwwwwwwwg', '.gwwwwwg.', '..ggggg..'], ink: { g: '#8A8F98', w: '#EDEAE0', r: '#D2453C', k: '#3A3D44' } },
+  globe: { rows: ['ppppppppp', 'pgggbbbbp', 'pggbbbggp', 'pgbbgggrp', 'pbbggggrp', 'pbgggbbbp', 'pggbbbggp', 'pgbbggggp', 'ppppppppp'], ink: { p: '#D9CFAE', g: '#7CAB5A', b: '#5AA5E0', r: '#D2453C' } },
+  plug: { rows: ['....r....', '...rRr...', '..rRRRr..', '...rRr...', '....h....', '....h....', '....h....', '....h....', '....h....'], ink: { r: '#A31515', R: '#FF4A3A', h: '#6B4A2C' } },
+  gear: { rows: ['.......ss', '......sss', '.....sss.', '....sss..', 'g..sss...', '.gsss....', '.hgg.....', 'h..g.....', '.........'], ink: { s: '#D8DEE6', g: '#C49A3C', h: '#5B4A35' } },
+  emerald: { rows: ['...ee....', '..eEEe...', '.eEWEEe..', 'eEWEEEEe.', '.eeEEee..', '..eeee...', '...ee....', '.........', '.........'], ink: { e: '#1E9E55', E: '#46E08A', W: '#D8FFE8' } },
+}
+
+const SKIN_TONES = ['#E9B98F', '#C98E5F', '#8B5A3A']
+const HAIR = ['#5A3A1E', '#D9B24C', '#26221E', '#B5522A']
+
+const TOOL_X = 17
+const TOOL_Y = 3
+
+function craftItemRects(item: Item) {
+  return item.rows
+    .map((row, j) =>
+      [...row]
+        .map((c, i) => (c === '.' ? '' : px(TOOL_X + i, TOOL_Y + j, 1, 1, item.ink[c] ?? '#000')))
+        .join(''),
+    )
+    .join('')
+}
+
+// The dark slot the figure stands in, lit from the bottom right like a game's
+// inventory, so it reads as a place and not as a sticker on the card.
+function craftSlot() {
+  return [
+    px(0, 0, CRAFT_W, CRAFT_H, '#0A0A14'),
+    px(0, 0, CRAFT_W, 1, '#24222E'),
+    px(0, 0, 1, CRAFT_H, '#24222E'),
+    px(0, CRAFT_H - 1, CRAFT_W, 1, '#55516A'),
+    px(CRAFT_W - 1, 0, 1, CRAFT_H, '#55516A'),
+  ].join('')
+}
+
+// What each buddy has on its head, so that no two in a row look alike.
+function craftHeadwear(phase: number, color: string, hair: string) {
+  const look = phase % 4
+  if (look === 1) return [px(6, 1, 8, 2, color), px(6, 1, 8, 1, shade(color, 1.3)), px(5, 3, 7, 1, shade(color, 0.6))].join('')
+  if (look === 2) return [px(6, 1, 8, 2, hair), px(6, 3, 8, 1, color), px(14, 3, 1, 2, shade(color, 0.75))].join('')
+  if (look === 3) return [px(6, 1, 8, 3, '#BFC5CE'), px(6, 1, 8, 1, '#E4E8EE'), px(13, 1, 1, 3, '#8E949E'), px(6, 4, 1, 1, '#8E949E'), px(13, 4, 1, 1, '#8E949E')].join('')
+  return [px(6, 1, 8, 2, hair), px(6, 3, 1, 2, hair), px(13, 3, 1, 2, hair), px(8, 3, 1, 1, hair)].join('')
+}
+
+function craftHead(phase: number, color: string) {
+  const skin = SKIN_TONES[phase % SKIN_TONES.length] ?? '#E9B98F'
+  const hair = HAIR[phase % HAIR.length] ?? '#5A3A1E'
+  return [
+    px(6, 1, 8, 8, skin),
+    px(13, 3, 1, 6, shade(skin, 0.82)),
+    px(6, 8, 8, 1, shade(skin, 0.86)),
+    px(9, 7, 2, 1, shade(skin, 0.66)),
+    craftHeadwear(phase, color, hair),
+  ].join('')
+}
+
+const craftOpenEyes = () => [px(8, 5, 1, 2, EYE), px(11, 5, 1, 2, EYE)].join('')
+const craftShutEyes = () => [px(8, 6, 2, 1, EYE), px(10, 6, 2, 1, EYE)].join('')
+const craftCrossEyes = () =>
+  [7, 10]
+    .map(x => [px(x, 4, 1, 1, EYE), px(x + 2, 4, 1, 1, EYE), px(x + 1, 5, 1, 1, EYE), px(x, 6, 1, 1, EYE), px(x + 2, 6, 1, 1, EYE)].join(''))
+    .join('')
+
+function craftTorso(color: string) {
+  return [
+    px(7, 9, 6, 5, color),
+    px(7, 9, 1, 5, shade(color, 1.28)),
+    px(12, 9, 1, 5, shade(color, 0.72)),
+    px(7, 13, 6, 1, shade(color, 0.5)),
+    px(9, 9, 2, 1, shade(color, 0.6)),
+  ].join('')
+}
+
+function craftLimbs(color: string, skin: string, step: 0 | 1) {
+  const pants = shade(color, 0.42)
+  const pantsLit = shade(color, 0.55)
+  const boots = shade(color, 0.22)
+  const sleeve = shade(color, 0.84)
+  const leg = (x: number, up: number) => [px(x, 14, 3, 3 - up, pants), px(x, 14, 1, 3 - up, pantsLit), px(x, 17 - up, 3, 1, boots)].join('')
+  const arm = (x: number, down: number) => [px(x, 9 + down, 2, 3, sleeve), px(x, 12 + down, 2, 2, skin)].join('')
+  return [leg(7, step), leg(10, 1 - step), arm(5, step), arm(13, 1 - step)].join('')
+}
+
+export function craftBuddySvg(options: { color: string; state: AgentState; held: Held | null; phase: number }) {
+  const { color, state, held, phase } = options
+  const skin = SKIN_TONES[phase % SKIN_TONES.length] ?? '#E9B98F'
+  const size = `width='${CRAFT_W * CRAFT_PX}' height='${CRAFT_H * CRAFT_PX}' viewBox='0 0 ${CRAFT_W} ${CRAFT_H}'`
+  const open = `<svg xmlns='http://www.w3.org/2000/svg' ${size} shape-rendering='crispEdges'>${craftSlot()}`
+  const shadow = px(6, 18, 8, 1, 'rgba(255,255,255,.12)')
+  const shirt = state === 'failed' ? '#6B6B73' : color
+  const body = craftTorso(shirt) + craftHead(phase, shirt)
+
+  if (state !== 'running') {
+    const eyes = state === 'done' ? craftShutEyes() : craftCrossEyes()
+    const mark = state === 'done' ? craftItemRects(CRAFT_ITEMS.emerald) : ''
+    return `${open}${shadow}${craftLimbs(shirt, skin, 0)}${body}${eyes}${mark}</svg>`
+  }
+
+  const stride = '.4s'
+  const begin = `${(-(phase % 7) * 0.13).toFixed(2)}s`
+  const blinkBegin = `${(-(phase % 5) * 0.7).toFixed(1)}s`
+  const blink = (values: string) =>
+    `<animate attributeName='opacity' values='${values}' keyTimes='0;.95;1' dur='3.6s' begin='${blinkBegin}' calcMode='discrete' repeatCount='indefinite'/>`
+  // The tool goes up and down with the arm that holds it, a pixel at a time.
+  const swing = `<animateTransform attributeName='transform' type='translate' values='0 0;1 -1' dur='${stride}' begin='${begin}' calcMode='discrete' repeatCount='indefinite'/>`
+  const tool = held ? `<g>${swing}${craftItemRects(CRAFT_ITEMS[held])}</g>` : ''
+  const glint = (x: number, y: number, delay: string) =>
+    `<rect x='${x}' y='${y}' width='1' height='1' fill='#FFFFA0'><animate attributeName='opacity' values='0;1;0;0' dur='1.2s' begin='${delay}' calcMode='discrete' repeatCount='indefinite'/></rect>`
+  const glints = held ? [glint(26, 2, begin), glint(23, 1, '-.4s'), glint(25, 12, '-.8s')].join('') : ''
+  return [
+    open,
+    shadow,
+    `<g>${flip('1', '0', stride, begin)}${craftLimbs(shirt, skin, 0)}</g>`,
+    `<g>${flip('0', '1', stride, begin)}${craftLimbs(shirt, skin, 1)}</g>`,
+    body,
+    `<g>${blink('1;0;0')}${craftOpenEyes()}</g>`,
+    `<g>${blink('0;1;1')}${craftShutEyes()}</g>`,
+    tool,
+    glints,
+    '</svg>',
+  ].join('')
+}
+
+// A heading on the chat's own ground: an edge all round keeps it legible on
+// the light chat and the dark one alike.
+export function craftHeadingSvg(text: string, scale: number, color: string) {
+  const width = textWidth(text) + 2
+  const height = 10
+  const d = textPath(text, 1, 1)
+  const edge = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+    .map(([dx, dy]) => `<path d='${d}' stroke='#000' transform='translate(${dx} ${dy})'/>`)
+    .join('')
+  return {
+    source: `<svg xmlns='http://www.w3.org/2000/svg' width='${width * scale}' height='${height * scale}' viewBox='0 0 ${width} ${height}' shape-rendering='crispEdges'>${edge}<path d='${d}' stroke='${color}'/></svg>`,
+    width: width * scale,
+    height: height * scale,
+  }
+}
+
+// The marks on a Craft Skin card, 7 × 7 pixels drawn at twice the size.
+const open7 = `<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 7 7' shape-rendering='crispEdges'>`
+
+function cells(rows: readonly string[], ink: string) {
+  return rows.map((row, j) => [...row].map((c, i) => (c === '#' ? px(i, j, 1, 1, ink) : '')).join('')).join('')
+}
+
+export function craftStepIconSvg(state: StepState, color: string) {
+  if (state === 'ok') return `${open7}${cells(['.......', '......#', '.....##', '#...##.', '##.##..', '.###...', '..#....'], '#55FF55')}</svg>`
+  if (state === 'error') return `${open7}${cells(['##...##', '###.###', '.#####.', '..###..', '.#####.', '###.###', '##...##'], '#FF5555')}</svg>`
+  const spin = `<animateTransform attributeName='transform' type='rotate' values='0 3.5 3.5;90 3.5 3.5;180 3.5 3.5;270 3.5 3.5' dur='.8s' calcMode='discrete' repeatCount='indefinite'/>`
+  return `${open7}<g>${spin}${cells(['..###..', '.#...#.', '#......', '#......', '#......', '.#.....', '..#....'], color)}</g></svg>`
+}
+
+export function craftChevronSvg(isOpen: boolean) {
+  const rows = isOpen ? ['.......', '.......', '#.....#', '##...##', '.##.##.', '..###..', '...#...'] : ['..#....', '..##...', '...##..', '....##.', '...##..', '..##...', '..#....']
+  return `${open7.replace(/='14'/g, "='12'")}${cells(rows, '#AAAAAA')}</svg>`
+}
+
+// --- The detail view: what kind of work each step was.
+
+export const KIND_HELD: Record<Kind, Held> = { read: 'book', search: 'lens', edit: 'pencil', run: 'terminal', web: 'globe', tool: 'gear' }
+
+// One calm colour per kind of work; on the Craft Skin, the game's chat colours.
+export const KIND_INK: Record<Kind, string> = { read: '#6A9BCC', search: '#9B86C9', edit: '#D97757', run: '#7DAE63', web: '#4FA3A5', tool: '#A3957F' }
+export const CRAFT_KIND_INK: Record<Kind, string> = { read: '#5555FF', search: '#FF55FF', edit: '#FFAA00', run: '#55FF55', web: '#55FFFF', tool: '#AAAAAA' }
+
+// The kind's item, on its own: the same pixels the buddy holds.
+export function kindIconSvg(kind: Kind, isCraft: boolean) {
+  const item = isCraft ? CRAFT_ITEMS[KIND_HELD[kind]] : ITEMS[KIND_HELD[kind]]
+  const size = item.rows.length
+  const rects = item.rows
+    .map((row, j) => [...row].map((c, i) => (c === '.' ? '' : px(i, j, 1, 1, item.ink[c] ?? '#000'))).join(''))
+    .join('')
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 ${size} ${size}' shape-rendering='crispEdges'>${rects}</svg>`
+}
+
+// The activity strip: every step a piece as wide as it took, in its kind's
+// colour, so the whole run reads at a glance. A step still running pulses,
+// one that failed is marked red underneath.
+export function stripSvg(segments: readonly Segment[], widthPx: number, heightPx: number, isCraft: boolean) {
+  const ink = isCraft ? CRAFT_KIND_INK : KIND_INK
+  const w = Math.max(40, Math.round(widthPx))
+  const h = Math.max(4, Math.round(heightPx))
+  const bar = Math.max(3, h - 3)
+  const top = Math.round((h - bar) / 2) - 1
+  const open = `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' viewBox='0 0 ${w} ${h}'${isCraft ? " shape-rendering='crispEdges'" : ''}>`
+  const ground = isCraft ? `<rect x='0' y='${top}' width='${w}' height='${bar}' fill='#2A2A2A'/>` : `<rect x='0' y='${top}' width='${w}' height='${bar}' rx='${bar / 2}' fill='rgba(128,128,128,.18)'/>`
+  if (segments.length === 0) return `${open}${ground}</svg>`
+  const total = segments.reduce((sum, s) => sum + s.weight, 0)
+  const gap = segments.length > 40 ? 0 : 1
+  const room = w - gap * (segments.length - 1)
+  let x = 0
+  const parts = segments
+    .map((s, i) => {
+      const width = i === segments.length - 1 ? Math.max(1, w - x) : Math.max(1, (s.weight / total) * room)
+      const at = x
+      x += width + gap
+      const fill = ink[s.kind]
+      const pulse = s.state === 'running' ? `<animate attributeName='opacity' values='1;.35;1' dur='1.2s' repeatCount='indefinite'/>` : ''
+      const fail = s.state === 'error' ? `<rect x='${at.toFixed(1)}' y='${h - 2}' width='${width.toFixed(1)}' height='2' fill='#E06C5F'/>` : ''
+      return `<rect x='${at.toFixed(1)}' y='${top}' width='${width.toFixed(1)}' height='${bar}' fill='${fill}'>${pulse}</rect>${fail}`
+    })
+    .join('')
+  const clip = isCraft ? '' : `<clipPath id='c'><rect x='0' y='${top}' width='${w}' height='${bar}' rx='${bar / 2}'/></clipPath>`
+  return `${open}${clip}${ground}<g${isCraft ? '' : " clip-path='url(#c)'"}>${parts}</g></svg>`
+}
+
+// A small dot in a kind's colour, for the legend.
+export function dotSvg(color: string, isCraft: boolean) {
+  return isCraft
+    ? `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 4 4' shape-rendering='crispEdges'><rect width='4' height='4' fill='${color}'/></svg>`
+    : `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'><circle cx='4' cy='4' r='4' fill='${color}'/></svg>`
 }

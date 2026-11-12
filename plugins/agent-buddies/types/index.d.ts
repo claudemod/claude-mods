@@ -3,6 +3,8 @@ export type Lang = 'de' | 'en'
 export type StepState = 'running' | 'ok' | 'error'
 export type AgentState = 'running' | 'done' | 'stopped' | 'failed'
 export type Held = 'pencil' | 'book' | 'terminal' | 'lens' | 'globe' | 'plug' | 'gear'
+// What kind of work a step is: the phases of an agent's run are runs of one kind.
+export type Kind = 'read' | 'search' | 'edit' | 'run' | 'web' | 'tool'
 
 // One line of what a step shows when it is opened.
 export type DetailLine = { text: string; tone?: 'add' | 'del' | 'dim' }
@@ -13,7 +15,10 @@ export type Step = {
   name: string
   arg: string
   tool: string
+  kind: Kind
   state: StepState
+  startedAt: number
+  endedAt?: number
   detail: DetailLine[]
 }
 
@@ -24,6 +29,12 @@ export type Agent = {
   state: AgentState
   startedAt: number
   endedAt?: number
+  // The task it was given, its type and model, and what it answered.
+  prompt: string
+  type: string
+  model: string
+  answer: string
+  tokens: number
   // Every call it made; `steps` keeps only the latest ones.
   total: number
   counts: Record<string, number>
@@ -40,6 +51,9 @@ export type CardRow = {
   detail: DetailLine[]
 }
 
+// One piece of the activity strip: a step, as wide as it took.
+export type Segment = { kind: Kind; weight: number; state: StepState }
+
 export type CardProps = {
   id: string
   name: string
@@ -53,17 +67,70 @@ export type CardProps = {
   columns: number
   hasPictures: boolean
   rows: CardRow[]
-  isExpanded: boolean
+  strip: Segment[]
+  // The Craft Skin: blocky figure, pixel words, a card like an item's tooltip.
+  isCraftSkin: boolean
 }
 
-export type CardMessage = { kind: 'step'; id: string } | { kind: 'agent'; id: string }
+// A step in the detail view: when it started and how long it took.
+export type DetailRow = CardRow & { kind: Kind; at: string; took: string }
+
+export type Phase = {
+  id: string
+  kind: Kind
+  label: string
+  summary: string
+  errors: string
+  took: string
+  isOpen: boolean
+  rows: DetailRow[]
+}
+
+// A block of text, cut to a few lines until it is opened.
+export type Fold = { id: string; lines: string[]; isOpen: boolean; more: string }
+
+export type Tab = { id: string; name: string; color: string; state: AgentState }
+
+export type DetailProps = {
+  id: string
+  name: string
+  color: string
+  state: AgentState
+  status: string
+  meta: string
+  held: Held | null
+  phase: number
+  columns: number
+  hasPictures: boolean
+  isCraftSkin: boolean
+  startedAt: number
+  tabs: Tab[]
+  strip: Segment[]
+  legend: { kind: Kind; label: string; count: number }[]
+  words: { back: string; task: string; flow: string; result: string; waiting: string; noSteps: string }
+  task: Fold
+  phases: Phase[]
+  result: Fold | null
+}
+
+export type CardMessage =
+  | { kind: 'step'; id: string }
+  | { kind: 'agent'; id: string }
+  | { kind: 'back' }
+  | { kind: 'toggle'; id: string }
 
 declare module 'claude-code' {
   interface PluginState {
+    // Chosen in the XP bar's options; read here, written only there.
+    'xp-bar': {
+      craftSkin: boolean
+    }
     'agent-buddies': {
-      agents: Agent[]
+      agents: Shaped<Agent[]>
       open: string[]
       expanded: string[]
+      // The agent whose detail view is shown; '' for the list.
+      focus: string
       language: Lang
     }
   }
